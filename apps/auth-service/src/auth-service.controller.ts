@@ -59,29 +59,34 @@ export class AuthServiceController implements OnModuleInit {
 
   @GrpcMethod('AuthService', 'LoginInit')
   async loginInit(data: { email: string }): Promise<{ success: boolean; message: string }> {
-    console.log('LoginInit', data);
+    console.log(`[LoginInit] Request received for: ${data.email}`);
     const userExists = await this.authService.checkUserExists(data.email);
     if (!userExists) {
+      console.log(`[LoginInit] User not found: ${data.email}`);
       return { success: false, message: 'User not found' };
     }
     const otp = this.authService.generateOtp();
+    console.log(`[LoginInit] Generated OTP for ${data.email}: ${otp}`);
     await this.authService.storeLoginOtp(data.email, otp);
 
     try {
       await lastValueFrom(this.emailService.sendOtpEmail({ email: data.email, otp }));
       return { success: true, message: 'OTP sent to email' };
     } catch (e) {
+      console.error(`[LoginInit] Failed to send email: ${e.message}`);
       return { success: false, message: 'Failed to send email' };
     }
   }
 
   @GrpcMethod('AuthService', 'LoginVerify')
   async loginVerify(data: { email: string; otp: string }): Promise<{ success: boolean; message: string; accessToken: string }> {
-    console.log('LoginVerify', data);
+    console.log(`[LoginVerify] Verifying OTP for: ${data.email}, OTP: ${data.otp}`);
     const isValid = await this.authService.verifyLoginOtp(data.email, data.otp);
     if (isValid) {
+      console.log(`[LoginVerify] Success for ${data.email}`);
       return { success: true, message: 'Login successful', accessToken: 'mock_jwt_token' };
     }
+    console.log(`[LoginVerify] Invalid OTP for ${data.email}`);
     return { success: false, message: 'Invalid OTP', accessToken: '' };
   }
 }
