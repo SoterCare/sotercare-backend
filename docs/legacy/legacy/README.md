@@ -1,98 +1,140 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# NestJS Auth Microservice (gRPC + HTTP)
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+This is a **NestJS Monorepo** project implementing an **Authentication Flow** using Email-based TOTP (Time-based One-Time Password) for Registration and Login. It uses **gRPC** for efficient inter-service communication and exposes an **HTTP API Gateway** for client interaction.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Architecture
 
-## Description
+The system consists of three microservices:
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+1.  **API Gateway** (`apps/api-gateway`):
+    -   Exposes HTTP REST endpoints.
+    -   Acts as a proxy, converting HTTP requests to gRPC calls.
+    -   Forwards requests to the **Auth Service**.
 
-## Project setup
+2.  **Auth Service** (`apps/auth-service`):
+    -   **Transport**: gRPC.
+    -   **Persistence**: PostgreSQL (TypeORM) for User data.
+    -   **Caching**: Redis for temporary OTP storage.
+    -   **Logic**: Handles Registration, Login, and OTP validation.
+    -   Calls the **Email Service** via gRPC to send emails.
+
+3.  **Email Service** (`apps/email-service`):
+    -   **Transport**: gRPC.
+    -   **Logic**: Handles sending emails (currently logs to console).
+
+## Tech Stack
+
+-   **Framework**: NestJS
+-   **Communication**: gRPC (Protobuf), HTTP
+-   **Database**: PostgreSQL (TypeORM)
+-   **Cache**: Redis
+-   **Language**: TypeScript
+
+## Prerequisites
+
+-   Node.js (v16+)
+-   PostgreSQL
+-   Redis
+
+## Setup
+
+1.  **Install Dependencies**:
+    ```bash
+    npm install
+    ```
+
+2.  **Environment Configuration**:
+    Create a `.env` file in the root directory with the following variables:
+    ```env
+    DB_HOST=localhost
+    DB_PORT=5432
+    DB_USER=postgres
+    DB_PASS=postgres
+    DB_NAME=auth_db
+    REDIS_HOST=localhost
+    REDIS_PORT=6379
+    ```
+
+3.  **Database Setup**:
+    -   Ensure PostgreSQL and Redis are running.
+    -   Create the database named `auth_db` (or whatever you set in `.env`).
+
+## Running the App
+
+You can run all services with a single command:
 
 ```bash
-$ npm install
+npm run start:all
 ```
 
-## Compile and run the project
+Alternatively, run them individually in separate terminals:
 
 ```bash
-# development
-$ npm run start
+# Terminal 1: API Gateway (Port 3000)
+npm run start:dev api-gateway
 
-# watch mode
-$ npm run start:dev
+# Terminal 2: Auth Service (gRPC)
+npm run start:dev auth-service
 
-# production mode
-$ npm run start:prod
+# Terminal 3: Email Service (gRPC)
+npm run start:dev email-service
 ```
 
-## Run tests
+## API Documentation
 
-```bash
-# unit tests
-$ npm run test
+APIs are available at `http://localhost:3000`.
 
-# e2e tests
-$ npm run test:e2e
+### Registration Flow
 
-# test coverage
-$ npm run test:cov
-```
+1.  **Register User**
+    -   **Endpoint**: `POST /auth/register`
+    -   **Body**:
+        ```json
+        {
+          "name": "Jane Doe",
+          "email": "jane@example.com"
+        }
+        ```
+    -   **Action**: Generates an OTP, stores it in Redis (5 min TTL), and triggers the Email Service to send the OTP.
 
-## Deployment
+2.  **Verify Registration**
+    -   **Endpoint**: `POST /auth/verify`
+    -   **Body**:
+        ```json
+        {
+          "email": "jane@example.com",
+          "otp": "123456"
+        }
+        ```
+    -   **Action**: Verifies the OTP. If valid, creates the User in PostgreSQL.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+### Login Flow
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+1.  **Login**
+    -   **Endpoint**: `POST /auth/login`
+    -   **Body**:
+        ```json
+        {
+          "email": "jane@example.com"
+        }
+        ```
+    -   **Action**: Checks if user exists. If yes, generates a login OTP, stores it in Redis, and sends email.
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
+2.  **Verify Login**
+    -   **Endpoint**: `POST /auth/login-verify`
+    -   **Body**:
+        ```json
+        {
+          "email": "jane@example.com",
+          "otp": "654321"
+        }
+        ```
+    -   **Action**: Verifies the OTP. Returns success status (and mock token).
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Project Structure
 
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+-   `apps/`
+    -   `api-gateway`: HTTP entry point.
+    -   `auth-service`: Core logic, DB, Redis.
+    -   `email-service`: Email handling.
+-   `libs/common/src/proto`: Shared Protobuf definitions (`auth.proto`, `email.proto`).
