@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package auth;
+
+service AuthService {
+  rpc RegisterUser (RegisterUserRequest) returns (AuthResponse);
+  rpc VerifyRegistration (VerifyRegistrationRequest) returns (AuthResponse);
+  rpc LoginInit (LoginInitRequest) returns (AuthResponse);
+  rpc LoginVerify (LoginVerifyRequest) returns (LoginResponse);
+}
+
+message RegisterUserRequest {
+  string name = 1;
+  string email = 2;
+}
+
+message VerifyRegistrationRequest {
+  string email = 1;
+  string otp = 2;
+}
+
+message LoginInitRequest {
+  string email = 1;
+}
+
+message LoginVerifyRequest {
+  string email = 1;
+  string otp = 2;
+}
+
+message AuthResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message LoginResponse {
+  bool success = 1;
+  string message = 2;
+  string accessToken = 3; // JWT token
+}
