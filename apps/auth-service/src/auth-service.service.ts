@@ -37,11 +37,11 @@ export class AuthServiceService {
     return false;
   }
 
-  async createUser(email: string) {
+  async createUser(email: string): Promise<User> {
     let user = await this.userRepository.findOneBy({ email });
     if (user) {
       console.log(`User already exists: ${email}`);
-      return;
+      return user;
     }
 
     const key = `temp_reg:${email}`;
@@ -56,6 +56,7 @@ export class AuthServiceService {
     user = this.userRepository.create({ email, name });
     await this.userRepository.save(user);
     console.log(`User created (DB): ${email}`);
+    return user;
   }
 
   async checkUserExists(email: string): Promise<boolean> {

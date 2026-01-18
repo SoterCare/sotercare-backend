@@ -25,7 +25,7 @@ class LoginDto {
 
 interface AuthService {
     registerUser(data: { name: string; email: string }): Observable<any>;
-    verifyRegistration(data: { email: string; otp: string }): Observable<any>;
+    verifyRegistration(data: { email: string; otp: string }): Observable<{ success: boolean; message: string; accessToken: string; user: any }>;
     loginInit(data: { email: string }): Observable<any>;
     loginVerify(data: { email: string; otp: string }): Observable<any>;
 }

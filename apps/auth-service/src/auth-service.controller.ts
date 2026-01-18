@@ -39,14 +39,22 @@ export class AuthServiceController implements OnModuleInit {
   }
 
   @GrpcMethod('AuthService', 'VerifyRegistration')
-  async verifyRegistration(data: { email: string; otp: string }): Promise<{ success: boolean; message: string }> {
+  async verifyRegistration(data: { email: string; otp: string }): Promise<{ success: boolean; message: string; accessToken?: string; user?: any }> {
     console.log('VerifyRegistration', data);
     const isValid = await this.authService.verifyTempOtp(data.email, data.otp);
     if (!isValid) {
       return { success: false, message: 'Invalid OTP' };
     }
-    await this.authService.createUser(data.email);
-    return { success: true, message: 'User registered successfully' };
+    const user = await this.authService.createUser(data.email);
+    // Mock Token Generation
+    const accessToken = Buffer.from(JSON.stringify({ sub: user.id, email: user.email })).toString('base64');
+
+    return {
+      success: true,
+      message: 'User registered successfully',
+      accessToken,
+      user
+    };
   }
 
   @GrpcMethod('AuthService', 'LoginInit')

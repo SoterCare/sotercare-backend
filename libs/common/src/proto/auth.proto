@@ -4,7 +4,7 @@ package auth;
 
 service AuthService {
   rpc RegisterUser (RegisterUserRequest) returns (AuthResponse);
-  rpc VerifyRegistration (VerifyRegistrationRequest) returns (AuthResponse);
+  rpc VerifyRegistration (VerifyRegistrationRequest) returns (VerifyRegistrationResponse);
   rpc LoginInit (LoginInitRequest) returns (AuthResponse);
   rpc LoginVerify (LoginVerifyRequest) returns (LoginResponse);
 }
@@ -28,9 +28,22 @@ message LoginVerifyRequest {
   string otp = 2;
 }
 
+message User {
+  int32 id = 1;
+  string email = 2;
+  string name = 3;
+}
+
 message AuthResponse {
   bool success = 1;
   string message = 2;
+}
+
+message VerifyRegistrationResponse {
+    bool success = 1;
+    string message = 2;
+    string accessToken = 3;
+    User user = 4;
 }
 
 message LoginResponse {
