@@ -34,6 +34,7 @@ import { User } from './user.entity';
         name: 'EMAIL_SERVICE',
         transport: Transport.GRPC,
         options: {
+          url: 'localhost:50052',
           package: 'email',
           protoPath: join(__dirname, '../../../libs/common/src/proto/email.proto'),
         },

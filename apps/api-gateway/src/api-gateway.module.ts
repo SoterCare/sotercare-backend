@@ -12,6 +12,7 @@ import { AuthController } from './auth.controller';
         name: 'AUTH_SERVICE',
         transport: Transport.GRPC,
         options: {
+          url: 'localhost:50051',
           package: 'auth',
           protoPath: join(__dirname, '../../../libs/common/src/proto/auth.proto'),
         },

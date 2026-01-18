@@ -2,6 +2,26 @@ import { Body, Controller, Inject, OnModuleInit, Post } from '@nestjs/common';
 import type { ClientGrpc } from '@nestjs/microservices'; // Correct import with type
 import type { Observable } from 'rxjs'; // import type
 import { lastValueFrom } from 'rxjs';
+import { ApiTags, ApiOperation, ApiBody, ApiProperty } from '@nestjs/swagger';
+
+class RegisterDto {
+    @ApiProperty({ example: 'John Doe' })
+    name: string;
+    @ApiProperty({ example: 'john@example.com' })
+    email: string;
+}
+
+class VerifyDto {
+    @ApiProperty({ example: 'john@example.com' })
+    email: string;
+    @ApiProperty({ example: '123456' })
+    otp: string;
+}
+
+class LoginDto {
+    @ApiProperty({ example: 'john@example.com' })
+    email: string;
+}
 
 interface AuthService {
     registerUser(data: { name: string; email: string }): Observable<any>;
@@ -10,6 +30,7 @@ interface AuthService {
     loginVerify(data: { email: string; otp: string }): Observable<any>;
 }
 
+@ApiTags('auth')
 @Controller('auth')
 export class AuthController implements OnModuleInit {
     private authService: AuthService;
@@ -21,22 +42,30 @@ export class AuthController implements OnModuleInit {
     }
 
     @Post('register')
-    async register(@Body() body: { name: string; email: string }) {
+    @ApiOperation({ summary: 'Register a new user' })
+    @ApiBody({ type: RegisterDto })
+    async register(@Body() body: RegisterDto) {
         return lastValueFrom(this.authService.registerUser(body));
     }
 
     @Post('verify')
-    async verify(@Body() body: { email: string; otp: string }) {
+    @ApiOperation({ summary: 'Verify registration OTP' })
+    @ApiBody({ type: VerifyDto })
+    async verify(@Body() body: VerifyDto) {
         return lastValueFrom(this.authService.verifyRegistration(body));
     }
 
     @Post('login')
-    async login(@Body() body: { email: string }) {
+    @ApiOperation({ summary: 'Initiate login' })
+    @ApiBody({ type: LoginDto })
+    async login(@Body() body: LoginDto) {
         return lastValueFrom(this.authService.loginInit(body));
     }
 
     @Post('login-verify')
-    async loginVerify(@Body() body: { email: string; otp: string }) {
+    @ApiOperation({ summary: 'Verify login OTP' })
+    @ApiBody({ type: VerifyDto })
+    async loginVerify(@Body() body: VerifyDto) {
         return lastValueFrom(this.authService.loginVerify(body));
     }
 }
