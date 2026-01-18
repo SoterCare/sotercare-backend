@@ -10,16 +10,17 @@ The system consists of three microservices:
     -   Exposes HTTP REST endpoints.
     -   Acts as a proxy, converting HTTP requests to gRPC calls.
     -   Forwards requests to the **Auth Service**.
+    -   **Swagger UI**: Available at `/api`.
 
 2.  **Auth Service** (`apps/auth-service`):
-    -   **Transport**: gRPC.
+    -   **Transport**: gRPC (Port `50051`).
     -   **Persistence**: PostgreSQL (TypeORM) for User data.
     -   **Caching**: Redis for temporary OTP storage.
     -   **Logic**: Handles Registration, Login, and OTP validation.
-    -   Calls the **Email Service** via gRPC to send emails.
+    -   Calls the **Email Service** via gRPC.
 
 3.  **Email Service** (`apps/email-service`):
-    -   **Transport**: gRPC.
+    -   **Transport**: gRPC (Port `50052`).
     -   **Logic**: Handles sending emails (currently logs to console).
 
 ## Tech Stack
@@ -28,13 +29,12 @@ The system consists of three microservices:
 -   **Communication**: gRPC (Protobuf), HTTP
 -   **Database**: PostgreSQL (TypeORM)
 -   **Cache**: Redis
--   **Language**: TypeScript
+-   **Documentation**: Swagger (OpenAPI)
 
 ## Prerequisites
 
 -   Node.js (v16+)
--   PostgreSQL
--   Redis
+-   Docker & Docker Compose (for DB and Redis)
 
 ## Setup
 
@@ -44,7 +44,7 @@ The system consists of three microservices:
     ```
 
 2.  **Environment Configuration**:
-    Create a `.env` file in the root directory with the following variables:
+    Create a `.env` file in the root directory (already configured for Docker):
     ```env
     DB_HOST=localhost
     DB_PORT=5432
@@ -55,9 +55,10 @@ The system consists of three microservices:
     REDIS_PORT=6379
     ```
 
-3.  **Database Setup**:
-    -   Ensure PostgreSQL and Redis are running.
-    -   Create the database named `auth_db` (or whatever you set in `.env`).
+3.  **Start Infrastructure (Postgres & Redis)**:
+    ```bash
+    docker-compose up -d
+    ```
 
 ## Running the App
 
@@ -73,68 +74,69 @@ Alternatively, run them individually in separate terminals:
 # Terminal 1: API Gateway (Port 3000)
 npm run start:dev api-gateway
 
-# Terminal 2: Auth Service (gRPC)
+# Terminal 2: Auth Service (gRPC :50051)
 npm run start:dev auth-service
 
-# Terminal 3: Email Service (gRPC)
+# Terminal 3: Email Service (gRPC :50052)
 npm run start:dev email-service
 ```
 
 ## API Documentation
 
-APIs are available at `http://localhost:3000`.
+**Interactive Documentation (Swagger UI)** is available at: `http://localhost:3000/api`
 
 ### Registration Flow
 
 1.  **Register User**
     -   **Endpoint**: `POST /auth/register`
-    -   **Body**:
-        ```json
-        {
-          "name": "Jane Doe",
-          "email": "jane@example.com"
-        }
-        ```
-    -   **Action**: Generates an OTP, stores it in Redis (5 min TTL), and triggers the Email Service to send the OTP.
+    -   **Body**: `{"name": "Jane Doe", "email": "jane@example.com"}`
+    -   **Action**: Generates an OTP, stores it in Redis (5 min TTL), and triggers email.
 
 2.  **Verify Registration**
     -   **Endpoint**: `POST /auth/verify`
-    -   **Body**:
+    -   **Body**: `{"email": "jane@example.com", "otp": "123456"}`
+    -   **Response** (Success):
         ```json
         {
-          "email": "jane@example.com",
-          "otp": "123456"
+          "success": true,
+          "message": "User registered successfully",
+          "accessToken": "eyJhbGci...",
+          "user": {
+            "id": 1,
+            "email": "jane@example.com",
+            "name": "Jane Doe"
+          }
         }
         ```
-    -   **Action**: Verifies the OTP. If valid, creates the User in PostgreSQL.
 
 ### Login Flow
 
 1.  **Login**
     -   **Endpoint**: `POST /auth/login`
-    -   **Body**:
-        ```json
-        {
-          "email": "jane@example.com"
-        }
-        ```
-    -   **Action**: Checks if user exists. If yes, generates a login OTP, stores it in Redis, and sends email.
+    -   **Body**: `{"email": "jane@example.com"}`
+    -   **Action**: Checks if user exists. If yes, generates a login OTP.
 
 2.  **Verify Login**
     -   **Endpoint**: `POST /auth/login-verify`
-    -   **Body**:
+    -   **Body**: `{"email": "jane@example.com", "otp": "654321"}`
+    -   **Response** (Success):
         ```json
         {
-          "email": "jane@example.com",
-          "otp": "654321"
+          "success": true,
+          "message": "Login successful",
+          "accessToken": "eyJhbGci...",
+          "user": {
+            "id": 1,
+            "email": "jane@example.com",
+            "name": "Jane Doe"
+          }
         }
         ```
-    -   **Action**: Verifies the OTP. Returns success status (and mock token).
 
 ## Project Structure
 
 -   `apps/`
-    -   `api-gateway`: HTTP entry point.
+    -   `api-gateway`: HTTP entry point + Swagger.
     -   `auth-service`: Core logic, DB, Redis.
     -   `email-service`: Email handling.
 -   `libs/common/src/proto`: Shared Protobuf definitions (`auth.proto`, `email.proto`).
