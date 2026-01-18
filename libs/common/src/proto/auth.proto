@@ -50,4 +50,5 @@ message LoginResponse {
   bool success = 1;
   string message = 2;
   string accessToken = 3; // JWT token
+  User user = 4;
 }

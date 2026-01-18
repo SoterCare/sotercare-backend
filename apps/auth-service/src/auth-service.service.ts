@@ -79,4 +79,7 @@ export class AuthServiceService {
     }
     return false;
   }
+  async getUserByEmail(email: string): Promise<User | null> {
+    return this.userRepository.findOneBy({ email });
+  }
 }
