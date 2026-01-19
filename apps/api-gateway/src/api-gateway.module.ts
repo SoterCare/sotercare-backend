@@ -4,6 +4,7 @@ import { join } from 'path';
 import { ApiGatewayController } from './api-gateway.controller';
 import { ApiGatewayService } from './api-gateway.service';
 import { AuthController } from './auth.controller';
+import { SummaryController } from './summary.controller';
 
 @Module({
   imports: [
@@ -17,9 +18,18 @@ import { AuthController } from './auth.controller';
           protoPath: join(__dirname, '../../../libs/common/src/proto/auth.proto'),
         },
       },
+      {
+        name: 'SUMMARY_SERVICE',
+        transport: Transport.GRPC,
+        options: {
+          url: 'localhost:50053',
+          package: 'summary',
+          protoPath: join(__dirname, '../../../libs/common/src/proto/summary.proto'),
+        },
+      },
     ]),
   ],
-  controllers: [ApiGatewayController, AuthController],
+  controllers: [ApiGatewayController, AuthController, SummaryController],
   providers: [ApiGatewayService],
 })
 export class ApiGatewayModule { }
