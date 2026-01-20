@@ -16,16 +16,21 @@ import { User } from './user.entity';
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get('DB_HOST', 'localhost'),
-        port: configService.get<number>('DB_PORT', 5432),
-        username: configService.get('DB_USER', 'postgres'),
-        password: configService.get('DB_PASS', 'postgres'),
-        database: configService.get('DB_NAME', 'auth_db'),
-        entities: [User],
-        synchronize: true, // Auto-create tables (dev only)
-      }),
+      useFactory: (configService: ConfigService) => {
+        const dbHost = configService.get('DB_HOST', 'localhost');
+        const dbPort = configService.get('DB_PORT', 5432);
+        console.log(`[AuthService] Connecting to DB at ${dbHost}:${dbPort} (User: ${configService.get('DB_USER')})`);
+        return {
+          type: 'postgres',
+          host: dbHost,
+          port: dbPort,
+          username: configService.get('DB_USER', 'postgres'),
+          password: configService.get('DB_PASS', 'postgres'),
+          database: configService.get('DB_NAME', 'auth_db'),
+          entities: [User],
+          synchronize: true, // Auto-create tables (dev only)
+        };
+      },
       inject: [ConfigService],
     }),
     TypeOrmModule.forFeature([User]),
