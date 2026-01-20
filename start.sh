@@ -21,9 +21,12 @@ if [ ! -s "$PG_DATA/PG_VERSION" ]; then
     mkdir -p $PG_DATA
     chown postgres:postgres $PG_DATA
     su - postgres -c "$PG_BIN/initdb -D $PG_DATA"
-    
     echo "Starting Postgres Server..."
-    su - postgres -c "$PG_BIN/pg_ctl -D $PG_DATA -l /var/lib/postgresql/postgres.log start"
+    mkdir -p /var/log/postgresql
+    chown postgres:postgres /var/log/postgresql
+    touch /var/log/postgresql/postgres.log
+    chown postgres:postgres /var/log/postgresql/postgres.log
+    su - postgres -c "$PG_BIN/pg_ctl -D $PG_DATA -l /var/log/postgresql/postgres.log start"
     sleep 5
     
     echo "Creating 'postgres' user with password and 'auth_db'..."
@@ -33,7 +36,11 @@ if [ ! -s "$PG_DATA/PG_VERSION" ]; then
     su - postgres -c "createdb auth_db"
 else
     echo "Postgres data found. Starting Server..."
-    su - postgres -c "$PG_BIN/pg_ctl -D $PG_DATA -l /var/lib/postgresql/postgres.log start"
+    mkdir -p /var/log/postgresql
+    chown postgres:postgres /var/log/postgresql
+    touch /var/log/postgresql/postgres.log
+    chown postgres:postgres /var/log/postgresql/postgres.log
+    su - postgres -c "$PG_BIN/pg_ctl -D $PG_DATA -l /var/log/postgresql/postgres.log start"
     sleep 5
 fi
 
