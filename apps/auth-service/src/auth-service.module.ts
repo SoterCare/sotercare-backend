@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
+import { credentials } from '@grpc/grpc-js';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { join } from 'path';
@@ -33,14 +34,18 @@ import { User } from './user.entity';
       {
         name: 'EMAIL_SERVICE',
         imports: [ConfigModule],
-        useFactory: (configService: ConfigService) => ({
-          transport: Transport.GRPC,
-          options: {
-            url: configService.get<string>('EMAIL_SERVICE_URL', 'localhost:50052'),
-            package: 'email',
-            protoPath: join(__dirname, '../../../libs/common/src/proto/email.proto'),
-          },
-        }),
+        useFactory: (configService: ConfigService) => {
+          const url = configService.get<string>('EMAIL_SERVICE_URL', 'localhost:50052');
+          return {
+            transport: Transport.GRPC,
+            options: {
+              url,
+              package: 'email',
+              protoPath: join(__dirname, '../../../libs/common/src/proto/email.proto'),
+              credentials: url.includes('onrender.com') ? credentials.createSsl() : undefined,
+            },
+          };
+        },
         inject: [ConfigService],
       },
     ]),
