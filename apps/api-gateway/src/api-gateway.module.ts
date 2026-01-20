@@ -1,7 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
-import { credentials } from '@grpc/grpc-js';
-import { ConfigModule, ConfigService } from '@nestjs/config';
 import { join } from 'path';
 import { ApiGatewayController } from './api-gateway.controller';
 import { ApiGatewayService } from './api-gateway.service';
@@ -10,51 +8,24 @@ import { SummaryController } from './summary.controller';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
-    ClientsModule.registerAsync([
+    ClientsModule.register([
       {
         name: 'AUTH_SERVICE',
-        imports: [ConfigModule],
-        useFactory: (configService: ConfigService) => {
-          let url = configService.get<string>('AUTH_SERVICE_URL', 'localhost:50051');
-          url = url.replace(/^https?:\/\//, ''); // Strip protocol
-          if (url.includes('onrender.com') && !url.includes(':')) {
-            url = `${url}:443`; // Default to 443 for render if port missing
-          }
-          console.log('Connecting to AUTH_SERVICE at:', url);
-          return {
-            transport: Transport.GRPC,
-            options: {
-              url,
-              package: 'auth',
-              protoPath: join(__dirname, '../../../libs/common/src/proto/auth.proto'),
-              credentials: url.includes('onrender.com') || url.endsWith(':443') ? credentials.createSsl() : undefined,
-            },
-          };
+        transport: Transport.GRPC,
+        options: {
+          url: 'localhost:50051',
+          package: 'auth',
+          protoPath: join(__dirname, '../../../libs/common/src/proto/auth.proto'),
         },
-        inject: [ConfigService],
       },
       {
         name: 'SUMMARY_SERVICE',
-        imports: [ConfigModule],
-        useFactory: (configService: ConfigService) => {
-          let url = configService.get<string>('SUMMARY_SERVICE_URL', 'localhost:50053');
-          url = url.replace(/^https?:\/\//, ''); // Strip protocol
-          if (url.includes('onrender.com') && !url.includes(':')) {
-            url = `${url}:443`;
-          }
-          console.log('Connecting to SUMMARY_SERVICE at:', url);
-          return {
-            transport: Transport.GRPC,
-            options: {
-              url,
-              package: 'summary',
-              protoPath: join(__dirname, '../../../libs/common/src/proto/summary.proto'),
-              credentials: url.includes('onrender.com') || url.endsWith(':443') ? credentials.createSsl() : undefined,
-            },
-          };
+        transport: Transport.GRPC,
+        options: {
+          url: 'localhost:50053',
+          package: 'summary',
+          protoPath: join(__dirname, '../../../libs/common/src/proto/summary.proto'),
         },
-        inject: [ConfigService],
       },
     ]),
   ],

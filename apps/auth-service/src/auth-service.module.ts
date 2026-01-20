@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
-import { credentials } from '@grpc/grpc-js';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { join } from 'path';
@@ -30,28 +29,15 @@ import { User } from './user.entity';
       inject: [ConfigService],
     }),
     TypeOrmModule.forFeature([User]),
-    ClientsModule.registerAsync([
+    ClientsModule.register([
       {
         name: 'EMAIL_SERVICE',
-        imports: [ConfigModule],
-        useFactory: (configService: ConfigService) => {
-          let url = configService.get<string>('EMAIL_SERVICE_URL', 'localhost:50052');
-          url = url.replace(/^https?:\/\//, '');
-          if (url.includes('onrender.com') && !url.includes(':')) {
-            url = `${url}:443`;
-          }
-          console.log('Connecting to EMAIL_SERVICE at:', url);
-          return {
-            transport: Transport.GRPC,
-            options: {
-              url,
-              package: 'email',
-              protoPath: join(__dirname, '../../../libs/common/src/proto/email.proto'),
-              credentials: url.includes('onrender.com') || url.endsWith(':443') ? credentials.createSsl() : undefined,
-            },
-          };
+        transport: Transport.GRPC,
+        options: {
+          url: 'localhost:50052',
+          package: 'email',
+          protoPath: join(__dirname, '../../../libs/common/src/proto/email.proto'),
         },
-        inject: [ConfigService],
       },
     ]),
   ],
