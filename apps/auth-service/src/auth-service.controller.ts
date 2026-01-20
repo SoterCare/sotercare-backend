@@ -26,15 +26,17 @@ export class AuthServiceController implements OnModuleInit {
     console.log('RegisterUser', data);
     // Logic: 
     // 1. Generate OTP
-    const otp = this.authService.generateOtp();
-    // 2. Store in Redis (mocked/delegated to service)
-    await this.authService.storeTempRegistration(data.email, data.name, otp);
-    // 3. Send Email
     try {
+      const otp = this.authService.generateOtp();
+      // 2. Store in Redis
+      await this.authService.storeTempRegistration(data.email, data.name, otp);
+
+      // 3. Send Email
       await lastValueFrom(this.emailService.sendOtpEmail({ email: data.email, otp, name: data.name }));
       return { success: true, message: 'OTP sent to email' };
     } catch (e) {
-      return { success: false, message: 'Failed to send email' };
+      console.error('Error in RegisterUser:', e);
+      return { success: false, message: 'Failed to process registration' };
     }
   }
 
