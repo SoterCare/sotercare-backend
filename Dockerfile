@@ -19,9 +19,10 @@ COPY . .
 # Build NestJS applications
 # We need to build all apps. Since we don't have a single build:all, we build them individually or rely on the fact that they are monorepo apps.
 # Ideally, we should build them to dist folder.
-RUN npm run build api-gateway
-RUN NestCLI=$(npm bin)/nest && $NestCLI build auth-service
-RUN NestCLI=$(npm bin)/nest && $NestCLI build email-service
+# Build NestJS applications
+RUN npm run build:api
+RUN npm run build:auth
+RUN npm run build:email
 
 # Setup Python Environment
 WORKDIR /usr/src/app/apps/ai-summary-service
