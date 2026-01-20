@@ -1,4 +1,7 @@
-import 'crypto';
+import * as crypto from 'crypto';
+// Polyfill for TypeORM/NestJS requiring global crypto
+(global as any).crypto = crypto;
+
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { join } from 'path';
