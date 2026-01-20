@@ -21,6 +21,26 @@ services:
     volumes:
       - redis_data:/data
 
+  api-gateway:
+    build: .
+    container_name: auth-backend
+    ports:
+      - "3000:3000"
+      - "50051:50051"
+      - "50052:50052"
+      - "50053:50053"
+    environment:
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+      - AUTH_SERVICE_URL=localhost:50051
+      - SUMMARY_SERVICE_URL=localhost:50053
+      - AUTH_GRPC_URL=0.0.0.0:50051
+      - EMAIL_GRPC_URL=0.0.0.0:50052
+      - SUMMARY_GRPC_PORT=50053
+    depends_on:
+      - postgres
+      - redis
+
 volumes:
   postgres_data:
   redis_data:
