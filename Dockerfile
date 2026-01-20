@@ -13,12 +13,16 @@ COPY package*.json ./
 # Install Node dependencies
 RUN npm install
 
+# Install Redis
+RUN apt-get update && apt-get install -y redis-server
+
 # Copy source code
 COPY . .
 
-# Build NestJS applications
-# We need to build all apps. Since we don't have a single build:all, we build them individually or rely on the fact that they are monorepo apps.
-# Ideally, we should build them to dist folder.
+# Copy and setup start script
+COPY start.sh ./
+RUN chmod +x start.sh
+
 # Build NestJS applications
 RUN npm run build:api
 RUN npm run build:auth
@@ -35,11 +39,7 @@ RUN . venv/bin/activate && python3 -m grpc_tools.protoc -I../../libs/common/src/
 WORKDIR /usr/src/app
 
 # Expose ports
-EXPOSE 3000 50051 50052 50053
+EXPOSE 3000 50051 50052 50053 6379
 
 # Start command
-# We use a custom start command to run everything.
-# We need to ensure we use the built versions (dist) for Node apps for performance, 
-# and the venv python for the AI service.
-
-CMD ["npm", "run", "start:prod:all"]
+CMD ["./start.sh"]
