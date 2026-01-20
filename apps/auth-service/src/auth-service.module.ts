@@ -50,6 +50,8 @@ import { User } from './user.entity';
         const client = createClient({
           url: `redis://${configService.get('REDIS_HOST', '127.0.0.1')}:${configService.get('REDIS_PORT', 6379)}`
         });
+        client.on('error', (err) => console.error('Redis Client Error', err));
+        client.on('connect', () => console.log('Redis Client Connected'));
         await client.connect();
         return client;
       },
