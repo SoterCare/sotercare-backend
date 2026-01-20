@@ -37,10 +37,14 @@ else
     sleep 5
 fi
 
-# 3. Check Services
-if pgrep "redis-server" > /dev/null; then echo "Redis: Running"; else echo "Redis: Failed"; fi
-if pgrep "postgres" > /dev/null; then echo "Postgres: Running"; else echo "Postgres: Failed"; fi
+# 3. Wait for Postgres to be ready
+echo "Waiting for Postgres to be ready..."
+until su - postgres -c "$PG_BIN/pg_isready"; do
+  echo "Postgres is unavailable - sleeping"
+  sleep 1
+done
+echo "Postgres is up!"
 
-# 4. Start Microservices
+# 4. Check Services and Start Microservices
 echo "Starting Application..."
 npm run start:prod:all

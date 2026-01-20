@@ -17,7 +17,7 @@ import { User } from './user.entity';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
-        const dbHost = configService.get('DB_HOST', 'localhost');
+        const dbHost = configService.get('DB_HOST', '127.0.0.1');
         const dbPort = configService.get('DB_PORT', 5432);
         console.log(`[AuthService] Connecting to DB at ${dbHost}:${dbPort} (User: ${configService.get('DB_USER')})`);
         return {
