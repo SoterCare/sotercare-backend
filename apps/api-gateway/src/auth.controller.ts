@@ -45,27 +45,47 @@ export class AuthController implements OnModuleInit {
     @ApiOperation({ summary: 'Register a new user' })
     @ApiBody({ type: RegisterDto })
     async register(@Body() body: RegisterDto) {
-        return lastValueFrom(this.authService.registerUser(body));
+        try {
+            return await lastValueFrom(this.authService.registerUser(body));
+        } catch (e) {
+            console.error('Register API Error:', e);
+            throw e;
+        }
     }
 
     @Post('verify')
     @ApiOperation({ summary: 'Verify registration OTP' })
     @ApiBody({ type: VerifyDto })
     async verify(@Body() body: VerifyDto) {
-        return lastValueFrom(this.authService.verifyRegistration(body));
+        try {
+            return await lastValueFrom(this.authService.verifyRegistration(body));
+        } catch (e) {
+            console.error('Verify API Error:', e);
+            throw e;
+        }
     }
 
     @Post('login')
     @ApiOperation({ summary: 'Initiate login' })
     @ApiBody({ type: LoginDto })
     async login(@Body() body: LoginDto) {
-        return lastValueFrom(this.authService.loginInit(body));
+        try {
+            return await lastValueFrom(this.authService.loginInit(body));
+        } catch (e) {
+            console.error('Login API Error:', e);
+            throw e;
+        }
     }
 
     @Post('login-verify')
     @ApiOperation({ summary: 'Verify login OTP' })
     @ApiBody({ type: VerifyDto })
     async loginVerify(@Body() body: VerifyDto) {
-        return lastValueFrom(this.authService.loginVerify(body));
+        try {
+            return await lastValueFrom(this.authService.loginVerify(body));
+        } catch (e) {
+            console.error('Login Verify API Error:', e);
+            throw e;
+        }
     }
 }

@@ -35,14 +35,19 @@ import { User } from './user.entity';
         name: 'EMAIL_SERVICE',
         imports: [ConfigModule],
         useFactory: (configService: ConfigService) => {
-          const url = configService.get<string>('EMAIL_SERVICE_URL', 'localhost:50052');
+          let url = configService.get<string>('EMAIL_SERVICE_URL', 'localhost:50052');
+          url = url.replace(/^https?:\/\//, '');
+          if (url.includes('onrender.com') && !url.includes(':')) {
+            url = `${url}:443`;
+          }
+          console.log('Connecting to EMAIL_SERVICE at:', url);
           return {
             transport: Transport.GRPC,
             options: {
               url,
               package: 'email',
               protoPath: join(__dirname, '../../../libs/common/src/proto/email.proto'),
-              credentials: url.includes('onrender.com') ? credentials.createSsl() : undefined,
+              credentials: url.includes('onrender.com') || url.endsWith(':443') ? credentials.createSsl() : undefined,
             },
           };
         },

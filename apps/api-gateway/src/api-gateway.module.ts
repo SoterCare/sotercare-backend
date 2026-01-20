@@ -16,14 +16,19 @@ import { SummaryController } from './summary.controller';
         name: 'AUTH_SERVICE',
         imports: [ConfigModule],
         useFactory: (configService: ConfigService) => {
-          const url = configService.get<string>('AUTH_SERVICE_URL', 'localhost:50051');
+          let url = configService.get<string>('AUTH_SERVICE_URL', 'localhost:50051');
+          url = url.replace(/^https?:\/\//, ''); // Strip protocol
+          if (url.includes('onrender.com') && !url.includes(':')) {
+            url = `${url}:443`; // Default to 443 for render if port missing
+          }
+          console.log('Connecting to AUTH_SERVICE at:', url);
           return {
             transport: Transport.GRPC,
             options: {
               url,
               package: 'auth',
               protoPath: join(__dirname, '../../../libs/common/src/proto/auth.proto'),
-              credentials: url.includes('onrender.com') ? credentials.createSsl() : undefined,
+              credentials: url.includes('onrender.com') || url.endsWith(':443') ? credentials.createSsl() : undefined,
             },
           };
         },
@@ -33,14 +38,19 @@ import { SummaryController } from './summary.controller';
         name: 'SUMMARY_SERVICE',
         imports: [ConfigModule],
         useFactory: (configService: ConfigService) => {
-          const url = configService.get<string>('SUMMARY_SERVICE_URL', 'localhost:50053');
+          let url = configService.get<string>('SUMMARY_SERVICE_URL', 'localhost:50053');
+          url = url.replace(/^https?:\/\//, ''); // Strip protocol
+          if (url.includes('onrender.com') && !url.includes(':')) {
+            url = `${url}:443`;
+          }
+          console.log('Connecting to SUMMARY_SERVICE at:', url);
           return {
             transport: Transport.GRPC,
             options: {
               url,
               package: 'summary',
               protoPath: join(__dirname, '../../../libs/common/src/proto/summary.proto'),
-              credentials: url.includes('onrender.com') ? credentials.createSsl() : undefined,
+              credentials: url.includes('onrender.com') || url.endsWith(':443') ? credentials.createSsl() : undefined,
             },
           };
         },
