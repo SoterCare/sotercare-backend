@@ -13,8 +13,8 @@ COPY package*.json ./
 # Install Node dependencies
 RUN npm install
 
-# Install Redis
-RUN apt-get update && apt-get install -y redis-server
+# Install Redis and Postgres
+RUN apt-get update && apt-get install -y redis-server postgresql postgresql-contrib
 
 # Copy source code
 COPY . .
