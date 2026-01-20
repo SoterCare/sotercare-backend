@@ -3,6 +3,7 @@ services:
   - type: web
     name: api-gateway
     env: node
+    plan: free
     buildCommand: npm install && npm run build api-gateway
     startCommand: node dist/apps/api-gateway/main.js
     envVars:
@@ -23,6 +24,7 @@ services:
   - type: pserv
     name: auth-service
     env: node
+    plan: free
     buildCommand: npm install && npm run build auth-service
     startCommand: node dist/apps/auth-service/main.js
     envVars:
@@ -66,6 +68,7 @@ services:
   - type: pserv
     name: email-service
     env: node
+    plan: free
     buildCommand: npm install && npm run build email-service
     startCommand: node dist/apps/email-service/main.js
     
@@ -73,6 +76,7 @@ services:
   - type: pserv
     name: ai-summary-service
     env: python
+    plan: free
     buildCommand: cd apps/ai-summary-service && pip install -r requirements.txt && python -m grpc_tools.protoc -I../../libs/common/src/proto --python_out=. --grpc_python_out=. summary.proto
     startCommand: cd apps/ai-summary-service && python main.py
 
