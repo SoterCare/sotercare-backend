@@ -48,7 +48,7 @@ import { User } from './user.entity';
       provide: 'REDIS_CLIENT',
       useFactory: async (configService: ConfigService) => {
         const client = createClient({
-          url: `redis://${configService.get('REDIS_HOST', 'localhost')}:${configService.get('REDIS_PORT', 6379)}`
+          url: `redis://${configService.get('REDIS_HOST', '127.0.0.1')}:${configService.get('REDIS_PORT', 6379)}`
         });
         await client.connect();
         return client;
