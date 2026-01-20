@@ -76,12 +76,14 @@ services:
     buildCommand: cd apps/ai-summary-service && pip install -r requirements.txt && python -m grpc_tools.protoc -I../../libs/common/src/proto --python_out=. --grpc_python_out=. summary.proto
     startCommand: cd apps/ai-summary-service && python main.py
 
+  # 5. Redis Cache
+  - type: redis
+    name: auth-redis
+    plan: free # or starter
+    ipAllowList: [] # Allow internal connections
+
 databases:
   - name: auth_db
     databaseName: auth_db
     user: auth_user
     plan: free # or starter
-
-  - name: auth-redis
-    plan: free # or starter
-    ipAllowList: [] # Allow internal connections
