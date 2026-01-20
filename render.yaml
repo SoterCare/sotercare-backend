@@ -1,0 +1,87 @@
+services:
+  # 1. API Gateway (Web Service)
+  - type: web
+    name: api-gateway
+    env: node
+    buildCommand: npm install && npm run build api-gateway
+    startCommand: node dist/apps/api-gateway/main.js
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: AUTH_SERVICE_URL
+        fromService:
+          type: pserv
+          name: auth-service
+          property: hostport
+      - key: SUMMARY_SERVICE_URL
+        fromService:
+          type: pserv
+          name: ai-summary-service
+          property: hostport
+
+  # 2. Auth Service (Private Service)
+  - type: pserv
+    name: auth-service
+    env: node
+    buildCommand: npm install && npm run build auth-service
+    startCommand: node dist/apps/auth-service/main.js
+    envVars:
+      - key: DB_HOST
+        fromDatabase:
+          name: auth_db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: auth_db
+          property: port
+      - key: DB_USER
+        fromDatabase:
+          name: auth_db
+          property: user
+      - key: DB_PASS
+        fromDatabase:
+          name: auth_db
+          property: password
+      - key: DB_NAME
+        fromDatabase:
+          name: auth_db
+          property: database
+      - key: REDIS_HOST
+        fromService:
+          type: redis
+          name: auth-redis
+          property: host
+      - key: REDIS_PORT
+        fromService:
+          type: redis
+          name: auth-redis
+          property: port
+      - key: EMAIL_SERVICE_URL
+        fromService:
+          type: pserv
+          name: email-service
+          property: hostport
+
+  # 3. Email Service (Private Service)
+  - type: pserv
+    name: email-service
+    env: node
+    buildCommand: npm install && npm run build email-service
+    startCommand: node dist/apps/email-service/main.js
+    
+  # 4. AI Summary Service (Private Service)
+  - type: pserv
+    name: ai-summary-service
+    env: python
+    buildCommand: cd apps/ai-summary-service && pip install -r requirements.txt && python -m grpc_tools.protoc -I../../libs/common/src/proto --python_out=. --grpc_python_out=. summary.proto
+    startCommand: cd apps/ai-summary-service && python main.py
+
+databases:
+  - name: auth_db
+    databaseName: auth_db
+    user: auth_user
+    plan: free # or starter
+
+  - name: auth-redis
+    plan: free # or starter
+    ipAllowList: [] # Allow internal connections

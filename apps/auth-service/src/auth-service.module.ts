@@ -29,15 +29,19 @@ import { User } from './user.entity';
       inject: [ConfigService],
     }),
     TypeOrmModule.forFeature([User]),
-    ClientsModule.register([
+    ClientsModule.registerAsync([
       {
         name: 'EMAIL_SERVICE',
-        transport: Transport.GRPC,
-        options: {
-          url: 'localhost:50052',
-          package: 'email',
-          protoPath: join(__dirname, '../../../libs/common/src/proto/email.proto'),
-        },
+        imports: [ConfigModule],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.GRPC,
+          options: {
+            url: configService.get<string>('EMAIL_SERVICE_URL', 'localhost:50052'),
+            package: 'email',
+            protoPath: join(__dirname, '../../../libs/common/src/proto/email.proto'),
+          },
+        }),
+        inject: [ConfigService],
       },
     ]),
   ],

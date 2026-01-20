@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { join } from 'path';
 import { ApiGatewayController } from './api-gateway.controller';
 import { ApiGatewayService } from './api-gateway.service';
@@ -8,24 +9,33 @@ import { SummaryController } from './summary.controller';
 
 @Module({
   imports: [
-    ClientsModule.register([
+    ConfigModule.forRoot({ isGlobal: true }),
+    ClientsModule.registerAsync([
       {
         name: 'AUTH_SERVICE',
-        transport: Transport.GRPC,
-        options: {
-          url: 'localhost:50051',
-          package: 'auth',
-          protoPath: join(__dirname, '../../../libs/common/src/proto/auth.proto'),
-        },
+        imports: [ConfigModule],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.GRPC,
+          options: {
+            url: configService.get<string>('AUTH_SERVICE_URL', 'localhost:50051'),
+            package: 'auth',
+            protoPath: join(__dirname, '../../../libs/common/src/proto/auth.proto'),
+          },
+        }),
+        inject: [ConfigService],
       },
       {
         name: 'SUMMARY_SERVICE',
-        transport: Transport.GRPC,
-        options: {
-          url: 'localhost:50053',
-          package: 'summary',
-          protoPath: join(__dirname, '../../../libs/common/src/proto/summary.proto'),
-        },
+        imports: [ConfigModule],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.GRPC,
+          options: {
+            url: configService.get<string>('SUMMARY_SERVICE_URL', 'localhost:50053'),
+            package: 'summary',
+            protoPath: join(__dirname, '../../../libs/common/src/proto/summary.proto'),
+          },
+        }),
+        inject: [ConfigService],
       },
     ]),
   ],
