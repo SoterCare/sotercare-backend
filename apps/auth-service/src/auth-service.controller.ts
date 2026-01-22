@@ -96,4 +96,10 @@ export class AuthServiceController implements OnModuleInit {
     console.log(`[LoginVerify] Invalid OTP for ${data.email}`);
     return { success: false, message: 'Invalid OTP', accessToken: '' };
   }
+
+  @GrpcMethod('AuthService', 'UpdateProfile')
+  async updateProfile(data: { id: number; name: string; email: string; mobileNumber: string }): Promise<{ success: boolean; message: string }> {
+    console.log(`[UpdateProfile] Request for user ID: ${data.id}`);
+    return this.authService.updateUser(data.id, data.name, data.email, data.mobileNumber);
+  }
 }

@@ -11,6 +11,9 @@ export class User {
     @Column()
     name: string;
 
+    @Column({ nullable: true })
+    mobileNumber: string;
+
     @CreateDateColumn()
     createdAt: Date;
 }

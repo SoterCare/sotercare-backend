@@ -82,4 +82,26 @@ export class AuthServiceService {
   async getUserByEmail(email: string): Promise<User | null> {
     return this.userRepository.findOneBy({ email });
   }
+
+  async updateUser(id: number, name: string, email: string, mobileNumber: string): Promise<{ success: boolean; message: string }> {
+    const user = await this.userRepository.findOneBy({ id });
+    if (!user) {
+      return { success: false, message: 'User not found' };
+    }
+
+    // Check if email is being changed and if it's already taken
+    if (email !== user.email) {
+      const existingUser = await this.userRepository.findOneBy({ email });
+      if (existingUser) {
+        return { success: false, message: 'Email already in use' };
+      }
+    }
+
+    user.name = name;
+    user.email = email;
+    user.mobileNumber = mobileNumber;
+    await this.userRepository.save(user);
+
+    return { success: true, message: 'Profile updated successfully' };
+  }
 }
