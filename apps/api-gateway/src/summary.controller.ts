@@ -1,7 +1,8 @@
-import { Body, Controller, Inject, OnModuleInit, Post } from '@nestjs/common';
+import { Body, Controller, Inject, OnModuleInit, Post, UseInterceptors } from '@nestjs/common';
 import type { ClientGrpc } from '@nestjs/microservices';
 import { Observable, lastValueFrom } from 'rxjs';
 import { ApiTags, ApiOperation, ApiBody, ApiProperty } from '@nestjs/swagger';
+import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
 
 class SummarizeDto {
     @ApiProperty({ example: 'Long text to summarize...' })
@@ -14,6 +15,7 @@ interface SummaryService {
 
 @ApiTags('summary')
 @Controller('summary')
+@UseInterceptors(IdempotencyInterceptor)
 export class SummaryController implements OnModuleInit {
     private summaryService: SummaryService;
 

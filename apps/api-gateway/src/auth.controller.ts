@@ -1,5 +1,6 @@
-import { Body, Controller, Inject, OnModuleInit, Post } from '@nestjs/common';
+import { Body, Controller, Inject, OnModuleInit, Post, UseInterceptors } from '@nestjs/common';
 import type { ClientGrpc } from '@nestjs/microservices'; // Correct import with type
+import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
 import type { Observable } from 'rxjs'; // import type
 import { lastValueFrom } from 'rxjs';
 import { ApiTags, ApiOperation, ApiBody, ApiProperty } from '@nestjs/swagger';
@@ -44,6 +45,7 @@ interface AuthService {
 
 @ApiTags('auth')
 @Controller('auth')
+@UseInterceptors(IdempotencyInterceptor)
 export class AuthController implements OnModuleInit {
     private authService: AuthService;
 
