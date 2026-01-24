@@ -102,4 +102,14 @@ export class AuthServiceController implements OnModuleInit {
     console.log(`[UpdateProfile] Request for user ID: ${data.id}`);
     return this.authService.updateUser(data.id, data.name, data.email, data.mobileNumber);
   }
+
+  @GrpcMethod('AuthService', 'GetProfile')
+  async getProfile(data: { id: number }): Promise<{ success: boolean; message: string; user?: any }> {
+    console.log(`[GetProfile] Request for user ID: ${data.id}`);
+    const user = await this.authService.getUserById(data.id);
+    if (!user) {
+      return { success: false, message: 'User not found' };
+    }
+    return { success: true, message: 'Profile retrieved successfully', user };
+  }
 }

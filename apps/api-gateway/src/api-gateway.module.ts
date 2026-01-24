@@ -4,6 +4,7 @@ import { join } from 'path';
 import { ApiGatewayController } from './api-gateway.controller';
 import { ApiGatewayService } from './api-gateway.service';
 import { AuthController } from './auth.controller';
+import { UserController } from './user.controller';
 import { SummaryController } from './summary.controller';
 import { RedisModule } from './redis.module';
 
@@ -31,7 +32,7 @@ import { RedisModule } from './redis.module';
       },
     ]),
   ],
-  controllers: [ApiGatewayController, AuthController, SummaryController],
+  controllers: [ApiGatewayController, AuthController, UserController, SummaryController],
   providers: [ApiGatewayService],
 })
 export class ApiGatewayModule { }

@@ -104,4 +104,8 @@ export class AuthServiceService {
 
     return { success: true, message: 'Profile updated successfully' };
   }
+
+  async getUserById(id: number): Promise<User | null> {
+    return this.userRepository.findOneBy({ id });
+  }
 }

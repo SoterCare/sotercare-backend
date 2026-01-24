@@ -8,6 +8,7 @@ service AuthService {
   rpc LoginInit (LoginInitRequest) returns (AuthResponse);
   rpc LoginVerify (LoginVerifyRequest) returns (LoginResponse);
   rpc UpdateProfile (UpdateProfileRequest) returns (AuthResponse);
+  rpc GetProfile (GetProfileRequest) returns (GetProfileResponse);
 }
 
 message RegisterUserRequest {
@@ -34,6 +35,16 @@ message UpdateProfileRequest {
   string name = 2;
   string email = 3;
   string mobileNumber = 4;
+}
+
+message GetProfileRequest {
+  int32 id = 1;
+}
+
+message GetProfileResponse {
+  bool success = 1;
+  string message = 2;
+  User user = 3;
 }
 
 message User {

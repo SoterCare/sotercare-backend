@@ -24,23 +24,14 @@ class LoginDto {
     email: string;
 }
 
-class UpdateProfileDto {
-    @ApiProperty({ example: 1 })
-    id: number;
-    @ApiProperty({ example: 'John Doe' })
-    name: string;
-    @ApiProperty({ example: 'john@example.com' })
-    email: string;
-    @ApiProperty({ example: '+1234567890' })
-    mobileNumber: string;
-}
+
 
 interface AuthService {
     registerUser(data: { name: string; email: string }): Observable<any>;
     verifyRegistration(data: { email: string; otp: string }): Observable<{ success: boolean; message: string; accessToken: string; user: any }>;
     loginInit(data: { email: string }): Observable<any>;
     loginVerify(data: { email: string; otp: string }): Observable<{ success: boolean; message: string; accessToken: string; user: any }>;
-    updateProfile(data: { id: number; name: string; email: string; mobileNumber: string }): Observable<{ success: boolean; message: string }>;
+
 }
 
 @ApiTags('auth')
@@ -83,10 +74,5 @@ export class AuthController implements OnModuleInit {
         return lastValueFrom(this.authService.loginVerify(body));
     }
 
-    @Post('profile')
-    @ApiOperation({ summary: 'Update user profile' })
-    @ApiBody({ type: UpdateProfileDto })
-    async updateProfile(@Body() body: UpdateProfileDto) {
-        return lastValueFrom(this.authService.updateProfile(body));
-    }
+
 }

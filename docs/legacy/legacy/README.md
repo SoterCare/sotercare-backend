@@ -33,42 +33,127 @@ The system consists of three microservices:
 
 ## Prerequisites
 
--   Node.js (v16+)
--   Docker & Docker Compose (for DB and Redis)
+-   Node.js (v18+)
+-   Docker & Docker Compose
+-   Python 3.10+ (for AI Summary Service)
 
-## Setup
+---
 
-1.  **Install Dependencies**:
-    ```bash
-    npm install
-    ```
+## Running with Docker (Recommended)
 
-2.  **Environment Configuration**:
-    Create a `.env` file in the root directory (already configured for Docker):
-    ```env
-    DB_HOST=localhost
-    DB_PORT=5432
-    DB_USER=postgres
-    DB_PASS=postgres
-    DB_NAME=auth_db
-    REDIS_HOST=localhost
-    REDIS_PORT=6379
-    ```
+This is the easiest way to run the entire stack. All services, databases, and dependencies are containerized.
 
-3.  **Start Infrastructure (Postgres & Redis)**:
-    ```bash
-    docker-compose up -d
-    ```
+### Quick Start
 
-## Running the App
+```bash
+# Build and start all containers
+docker-compose up --build -d
 
-You can run all services with a single command:
+# View logs
+docker-compose logs -f
+```
+
+### Services Available
+
+| Service       | URL/Port                     | Description                |
+|---------------|------------------------------|----------------------------|
+| API Gateway   | http://localhost:3000        | Main HTTP API              |
+| Swagger UI    | http://localhost:3000/api    | API Documentation          |
+| Auth Service  | localhost:50051 (gRPC)       | Authentication microservice|
+| Email Service | localhost:50052 (gRPC)       | Email handling             |
+| AI Summary    | localhost:50053 (gRPC)       | AI Summary service         |
+| PostgreSQL    | localhost:5432               | Database                   |
+| Redis         | localhost:6379               | Cache                      |
+
+### Stopping Docker
+
+```bash
+# Stop containers (keeps data)
+docker-compose down
+
+# Stop containers and remove volumes (clears database)
+docker-compose down -v
+```
+
+### Troubleshooting Docker
+
+**Port already in use error:**
+```bash
+# Find what's using the port (e.g., 6379)
+netstat -ano | findstr :6379
+
+# Stop all containers and try again
+docker-compose down
+docker-compose up -d
+```
+
+**Database password authentication failed:**
+```bash
+# This usually means old data persists with a different password
+# Reset volumes to fix:
+docker-compose down -v
+docker-compose up -d
+```
+
+---
+
+## Running Locally (Development)
+
+Use this method if you want to run services directly on your machine for development.
+
+### 1. Install Dependencies
+
+```bash
+npm install
+```
+
+### 2. Environment Configuration
+
+Create a `.env` file in the root directory:
+
+```env
+# Database (Docker Postgres)
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASS=postgres
+DB_NAME=auth_db
+
+# Redis (Docker Redis)
+REDIS_HOST=localhost
+REDIS_PORT=6379
+```
+
+### 3. Start Infrastructure Only
+
+Start only Postgres and Redis containers:
+
+```bash
+docker-compose up -d postgres redis
+```
+
+### 4. Setup Python Environment (for AI Service)
+
+```bash
+cd apps/ai-summary-service
+python -m venv venv
+
+# Windows
+venv\Scripts\pip install -r requirements.txt
+
+# Linux/Mac
+venv/bin/pip install -r requirements.txt
+
+cd ../..
+```
+
+### 5. Run All Services
 
 ```bash
 npm run start:all
 ```
 
-Alternatively, run them individually in separate terminals:
+Or run services individually in separate terminals:
 
 ```bash
 # Terminal 1: API Gateway (Port 3000)
@@ -79,7 +164,31 @@ npm run start:dev auth-service
 
 # Terminal 3: Email Service (gRPC :50052)
 npm run start:dev email-service
+
+# Terminal 4: AI Summary Service (gRPC :50053)
+npm run start:ai-service
 ```
+
+### Troubleshooting Local Development
+
+**"password authentication failed for user postgres":**
+- Ensure Docker Postgres is running: `docker ps`
+- Check your `.env` file has `DB_PASS=postgres`
+- If the Docker volume has old data, reset it:
+  ```bash
+  docker-compose down -v
+  docker-compose up -d postgres redis
+  ```
+
+**"system cannot find the path specified" (AI Service):**
+- The Python virtual environment is missing. Create it:
+  ```bash
+  cd apps/ai-summary-service
+  python -m venv venv
+  venv\Scripts\pip install -r requirements.txt
+  ```
+
+---
 
 ## API Documentation
 
@@ -133,10 +242,48 @@ npm run start:dev email-service
         }
         ```
 
+### User Profile
+
+1.  **Get Profile**
+    -   **Endpoint**: `GET /user/profile?id=1`
+    -   **Response** (Success):
+        ```json
+        {
+          "success": true,
+          "message": "Profile retrieved successfully",
+          "user": {
+            "id": 1,
+            "email": "jane@example.com",
+            "name": "Jane Doe",
+            "mobileNumber": "+1234567890"
+          }
+        }
+        ```
+
+2.  **Update Profile**
+    -   **Endpoint**: `POST /user/update`
+    -   **Body**: 
+        ```json
+        {
+          "id": 1,
+          "name": "Jane Smith",
+          "email": "jane.smith@example.com",
+          "mobileNumber": "+0987654321"
+        }
+        ```
+    -   **Response** (Success):
+        ```json
+        {
+          "success": true,
+          "message": "Profile updated successfully"
+        }
+        ```
+
 ## Project Structure
 
 -   `apps/`
     -   `api-gateway`: HTTP entry point + Swagger.
     -   `auth-service`: Core logic, DB, Redis.
     -   `email-service`: Email handling.
--   `libs/common/src/proto`: Shared Protobuf definitions (`auth.proto`, `email.proto`).
+    -   `ai-summary-service`: Python-based AI summary microservice.
+-   `libs/common/src/proto`: Shared Protobuf definitions (`auth.proto`, `email.proto`, `summary.proto`).
