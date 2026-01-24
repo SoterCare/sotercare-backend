@@ -134,16 +134,20 @@ docker-compose up -d postgres redis
 
 ### 4. Setup Python Environment (for AI Service)
 
+**Windows (PowerShell):**
+```powershell
+cd apps\ai-summary-service
+python -m venv venv
+.\venv\Scripts\pip install -r requirements.txt
+cd ..\..
+```
+
+**Linux/Mac:**
 ```bash
 cd apps/ai-summary-service
-python -m venv venv
-
-# Windows
-venv\Scripts\pip install -r requirements.txt
-
-# Linux/Mac
-venv/bin/pip install -r requirements.txt
-
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 cd ../..
 ```
 
