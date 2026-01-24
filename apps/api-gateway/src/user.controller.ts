@@ -22,6 +22,7 @@ interface AuthService {
 
 @ApiTags('user')
 @Controller('user')
+@UseInterceptors(IdempotencyInterceptor)
 export class UserController implements OnModuleInit {
     private authService: AuthService;
 
