@@ -120,6 +120,7 @@ export class AuthServiceController implements OnModuleInit {
     const result = await this.authService.initiateEmailUpdate(data.userId, data.newEmail);
 
     if (result.success && result.otp) {
+      console.log(`[InitiateEmailUpdate] OTP for ${data.newEmail}: ${result.otp}`);
       // Send OTP email to the new email address
       try {
         await lastValueFrom(this.emailService.sendOtpEmail({ email: data.newEmail, otp: result.otp }));
