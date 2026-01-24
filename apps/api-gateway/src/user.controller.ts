@@ -15,9 +15,27 @@ class UpdateProfileDto {
     mobileNumber: string;
 }
 
+class InitiateEmailUpdateDto {
+    @ApiProperty({ example: 1 })
+    userId: number;
+    @ApiProperty({ example: 'newemail@example.com' })
+    newEmail: string;
+}
+
+class VerifyEmailUpdateDto {
+    @ApiProperty({ example: 1 })
+    userId: number;
+    @ApiProperty({ example: 'newemail@example.com' })
+    newEmail: string;
+    @ApiProperty({ example: '123456' })
+    otp: string;
+}
+
 interface AuthService {
     updateProfile(data: { id: number; name: string; email: string; mobileNumber: string }): Observable<{ success: boolean; message: string }>;
     getProfile(data: { id: number }): Observable<{ success: boolean; message: string; user?: any }>;
+    initiateEmailUpdate(data: { userId: number; newEmail: string }): Observable<{ success: boolean; message: string }>;
+    verifyEmailUpdate(data: { userId: number; newEmail: string; otp: string }): Observable<{ success: boolean; message: string }>;
 }
 
 @ApiTags('user')
@@ -40,9 +58,24 @@ export class UserController implements OnModuleInit {
     }
 
     @Post('update')
-    @ApiOperation({ summary: 'Update user profile' })
+    @ApiOperation({ summary: 'Update user profile (name, mobile number only - email requires verification)' })
     @ApiBody({ type: UpdateProfileDto })
     async updateProfile(@Body() body: UpdateProfileDto) {
         return lastValueFrom(this.authService.updateProfile(body));
     }
+
+    @Post('email/initiate')
+    @ApiOperation({ summary: 'Initiate email update - sends OTP to new email' })
+    @ApiBody({ type: InitiateEmailUpdateDto })
+    async initiateEmailUpdate(@Body() body: InitiateEmailUpdateDto) {
+        return lastValueFrom(this.authService.initiateEmailUpdate(body));
+    }
+
+    @Post('email/verify')
+    @ApiOperation({ summary: 'Verify email update - confirms OTP and updates email' })
+    @ApiBody({ type: VerifyEmailUpdateDto })
+    async verifyEmailUpdate(@Body() body: VerifyEmailUpdateDto) {
+        return lastValueFrom(this.authService.verifyEmailUpdate(body));
+    }
 }
+

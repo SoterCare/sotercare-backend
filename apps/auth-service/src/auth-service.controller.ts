@@ -112,4 +112,31 @@ export class AuthServiceController implements OnModuleInit {
     }
     return { success: true, message: 'Profile retrieved successfully', user };
   }
+
+  @GrpcMethod('AuthService', 'InitiateEmailUpdate')
+  async initiateEmailUpdate(data: { userId: number; newEmail: string }): Promise<{ success: boolean; message: string }> {
+    console.log(`[InitiateEmailUpdate] Request for user ID: ${data.userId} to change email to: ${data.newEmail}`);
+
+    const result = await this.authService.initiateEmailUpdate(data.userId, data.newEmail);
+
+    if (result.success && result.otp) {
+      // Send OTP email to the new email address
+      try {
+        await lastValueFrom(this.emailService.sendOtpEmail({ email: data.newEmail, otp: result.otp }));
+      } catch (e) {
+        console.error(`[InitiateEmailUpdate] Failed to send email: ${e.message}`);
+        return { success: false, message: 'Failed to send verification email' };
+      }
+    }
+
+    // Return without exposing the OTP
+    return { success: result.success, message: result.message };
+  }
+
+  @GrpcMethod('AuthService', 'VerifyEmailUpdate')
+  async verifyEmailUpdate(data: { userId: number; newEmail: string; otp: string }): Promise<{ success: boolean; message: string }> {
+    console.log(`[VerifyEmailUpdate] Verifying OTP for user ID: ${data.userId}`);
+    return this.authService.verifyEmailUpdate(data.userId, data.newEmail, data.otp);
+  }
 }
+

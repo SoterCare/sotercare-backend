@@ -260,14 +260,14 @@ npm run start:ai-service
         }
         ```
 
-2.  **Update Profile**
+2.  **Update Profile** (name, mobile only - email requires separate verification)
     -   **Endpoint**: `POST /user/update`
     -   **Body**: 
         ```json
         {
           "id": 1,
           "name": "Jane Smith",
-          "email": "jane.smith@example.com",
+          "email": "jane@example.com",
           "mobileNumber": "+0987654321"
         }
         ```
@@ -279,6 +279,45 @@ npm run start:ai-service
         }
         ```
 
+### Email Update Flow
+
+When updating email, a two-step verification process is required:
+
+1.  **Initiate Email Update** (Sends OTP to new email)
+    -   **Endpoint**: `POST /user/email/initiate`
+    -   **Body**: 
+        ```json
+        {
+          "userId": 1,
+          "newEmail": "newemail@example.com"
+        }
+        ```
+    -   **Response** (Success):
+        ```json
+        {
+          "success": true,
+          "message": "Verification OTP sent to new email"
+        }
+        ```
+
+2.  **Verify Email Update** (Confirms OTP and updates email)
+    -   **Endpoint**: `POST /user/email/verify`
+    -   **Body**: 
+        ```json
+        {
+          "userId": 1,
+          "newEmail": "newemail@example.com",
+          "otp": "123456"
+        }
+        ```
+    -   **Response** (Success):
+        ```json
+        {
+          "success": true,
+          "message": "Email updated successfully"
+        }
+        ```
+
 ## Project Structure
 
 -   `apps/`
@@ -287,3 +326,4 @@ npm run start:ai-service
     -   `email-service`: Email handling.
     -   `ai-summary-service`: Python-based AI summary microservice.
 -   `libs/common/src/proto`: Shared Protobuf definitions (`auth.proto`, `email.proto`, `summary.proto`).
+

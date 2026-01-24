@@ -108,4 +108,57 @@ export class AuthServiceService {
   async getUserById(id: number): Promise<User | null> {
     return this.userRepository.findOneBy({ id });
   }
+
+  async initiateEmailUpdate(userId: number, newEmail: string): Promise<{ success: boolean; message: string; otp?: string }> {
+    // Check if user exists
+    const user = await this.userRepository.findOneBy({ id: userId });
+    if (!user) {
+      return { success: false, message: 'User not found' };
+    }
+
+    // Check if new email is same as current
+    if (user.email === newEmail) {
+      return { success: false, message: 'New email is the same as current email' };
+    }
+
+    // Check if new email is already taken by another user
+    const existingUser = await this.userRepository.findOneBy({ email: newEmail });
+    if (existingUser) {
+      return { success: false, message: 'Email already in use by another account' };
+    }
+
+    // Generate OTP and store in Redis
+    const otp = this.generateOtp();
+    const key = `email_update:${userId}:${newEmail}`;
+    await this.redisClient.set(key, otp, { EX: 300 }); // 5 min expiry
+    console.log(`[InitiateEmailUpdate] OTP for user ${userId} to change to ${newEmail}: ${otp}`);
+
+    return { success: true, message: 'Verification OTP sent to new email', otp };
+  }
+
+  async verifyEmailUpdate(userId: number, newEmail: string, otp: string): Promise<{ success: boolean; message: string }> {
+    const key = `email_update:${userId}:${newEmail}`;
+    const storedOtp = await this.redisClient.get(key);
+
+    if (!storedOtp) {
+      return { success: false, message: 'No pending email update or OTP expired' };
+    }
+
+    if (storedOtp !== otp) {
+      return { success: false, message: 'Invalid OTP' };
+    }
+
+    // OTP is valid, update the email
+    const user = await this.userRepository.findOneBy({ id: userId });
+    if (!user) {
+      return { success: false, message: 'User not found' };
+    }
+
+    user.email = newEmail;
+    await this.userRepository.save(user);
+    await this.redisClient.del(key); // Cleanup
+
+    console.log(`[VerifyEmailUpdate] User ${userId} email updated to ${newEmail}`);
+    return { success: true, message: 'Email updated successfully' };
+  }
 }

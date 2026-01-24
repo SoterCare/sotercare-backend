@@ -9,6 +9,8 @@ service AuthService {
   rpc LoginVerify (LoginVerifyRequest) returns (LoginResponse);
   rpc UpdateProfile (UpdateProfileRequest) returns (AuthResponse);
   rpc GetProfile (GetProfileRequest) returns (GetProfileResponse);
+  rpc InitiateEmailUpdate (InitiateEmailUpdateRequest) returns (AuthResponse);
+  rpc VerifyEmailUpdate (VerifyEmailUpdateRequest) returns (AuthResponse);
 }
 
 message RegisterUserRequest {
@@ -47,6 +49,17 @@ message GetProfileResponse {
   User user = 3;
 }
 
+message InitiateEmailUpdateRequest {
+  int32 userId = 1;
+  string newEmail = 2;
+}
+
+message VerifyEmailUpdateRequest {
+  int32 userId = 1;
+  string newEmail = 2;
+  string otp = 3;
+}
+
 message User {
   int32 id = 1;
   string email = 2;
@@ -72,3 +85,4 @@ message LoginResponse {
   string accessToken = 3; // JWT token
   User user = 4;
 }
+
