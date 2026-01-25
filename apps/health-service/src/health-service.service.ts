@@ -60,4 +60,14 @@ export class HealthServiceService {
 
     return Array.from(dates);
   }
+
+  async getLogsByDateRange(userId: number, startDate: string, endDate: string): Promise<VitalSign[]> {
+    return this.vitalSignRepository
+      .createQueryBuilder('vital')
+      .where('vital.userId = :userId', { userId })
+      .andWhere('vital.timestamp >= :startDate', { startDate: new Date(startDate).getTime() })
+      .andWhere('vital.timestamp <= :endDate', { endDate: new Date(endDate).getTime() })
+      .orderBy('vital.timestamp', 'ASC')
+      .getMany();
+  }
 }

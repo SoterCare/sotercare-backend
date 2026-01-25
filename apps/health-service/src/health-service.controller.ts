@@ -25,4 +25,13 @@ export class HealthServiceController {
     const dates = await this.healthService.getLogDates(userId);
     return { dates };
   }
+
+  @GrpcMethod('HealthService', 'GetLogsByDateRange')
+  async getLogsByDateRange(data: any) {
+    const userId = data.user_id;
+    const { start_date, end_date } = data;
+    console.log(`[HealthService] Fetching logs for user ${userId} from ${start_date} to ${end_date}`);
+    const logs = await this.healthService.getLogsByDateRange(userId, start_date, end_date);
+    return { logs };
+  }
 }

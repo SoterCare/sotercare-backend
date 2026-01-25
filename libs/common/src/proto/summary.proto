@@ -3,13 +3,17 @@ syntax = "proto3";
 package summary;
 
 service SummaryService {
-  rpc SummarizeText (SummarizeRequest) returns (SummarizeResponse);
+  rpc AnalyzeData (AnalyzeDataRequest) returns (AnalyzeDataResponse);
 }
 
-message SummarizeRequest {
-  string text = 1;
+message AnalyzeDataRequest {
+  string data_json = 1; // Raw logs as JSON string
+  string format = 2;    // "html", "text", "markdown"
 }
 
-message SummarizeResponse {
+message AnalyzeDataResponse {
   string summary = 1;
+  string recommendations = 2;
 }
+
+

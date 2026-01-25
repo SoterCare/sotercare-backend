@@ -32,7 +32,18 @@ message GetLogDatesResponse {
   repeated string dates = 1; // List of dates in YYYY-MM-DD format
 }
 
+message DateRangeRequest {
+  int32 user_id = 1;
+  string start_date = 2; // ISO 8601
+  string end_date = 3;   // ISO 8601
+}
+
+message GetLogsByDateRangeResponse {
+  repeated LogEntry logs = 1;
+}
+
 service HealthService {
   rpc SyncLogs (SyncLogsRequest) returns (SyncLogsResponse);
   rpc GetLogDates (GetLogDatesRequest) returns (GetLogDatesResponse);
+  rpc GetLogsByDateRange (DateRangeRequest) returns (GetLogsByDateRangeResponse);
 }

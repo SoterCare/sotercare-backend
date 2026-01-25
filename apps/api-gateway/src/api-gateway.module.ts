@@ -8,6 +8,7 @@ import { AuthController } from './auth.controller';
 import { UserController } from './user.controller';
 import { SummaryController } from './summary.controller';
 import { HealthController } from './health.controller';
+import { ReportsController } from './reports.controller'; // Import
 import { RedisModule } from './redis.module';
 import { JwtStrategy } from './auth/jwt.strategy'; // Import JwtStrategy
 
@@ -32,6 +33,15 @@ import { JwtStrategy } from './auth/jwt.strategy'; // Import JwtStrategy
           url: process.env.SUMMARY_SERVICE_URL || 'localhost:50053',
           package: 'summary',
           protoPath: join(__dirname, '../../../libs/common/src/proto/summary.proto'),
+          loader: {
+            keepCase: true,
+            defaults: true,
+            json: true,
+            arrays: true,
+          },
+          // Set to 100 MB for large log payloads
+          maxReceiveMessageLength: 100 * 1024 * 1024,
+          maxSendMessageLength: 100 * 1024 * 1024,
         },
       },
       {
@@ -54,7 +64,7 @@ import { JwtStrategy } from './auth/jwt.strategy'; // Import JwtStrategy
       },
     ]),
   ],
-  controllers: [ApiGatewayController, AuthController, UserController, SummaryController, HealthController],
+  controllers: [ApiGatewayController, AuthController, UserController, SummaryController, HealthController, ReportsController], // Add Controller
   providers: [ApiGatewayService, JwtStrategy], // Add JwtStrategy
 })
 export class ApiGatewayModule { }
