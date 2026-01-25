@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package health;
+
+service HealthService {
+  rpc SyncLogs (SyncLogsRequest) returns (SyncLogsResponse);
+}
+
+message LogEntry {
+  int32 id = 1; // Clients local ID
+  float heartRate = 2;
+  float spo2 = 3;
+  float temperature = 4;
+  int64 timestamp = 5;
+}
+
+message SyncLogsRequest {
+  int32 userId = 1;
+  repeated LogEntry logs = 2;
+}
+
+message SyncLogsResponse {
+  bool success = 1;
+  string message = 2;
+  int32 syncedCount = 3;
+}

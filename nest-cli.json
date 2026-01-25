@@ -63,6 +63,15 @@
           }
         ]
       }
+    },
+    "health-service": {
+      "type": "application",
+      "root": "apps/health-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/health-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/health-service/tsconfig.app.json"
+      }
     }
   }
 }

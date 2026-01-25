@@ -27,6 +27,7 @@ RUN chmod +x start.sh
 RUN npm run build:api
 RUN npm run build:auth
 RUN npm run build:email
+RUN npm run build:health
 
 # Setup Python Environment
 WORKDIR /usr/src/app/apps/ai-summary-service
@@ -39,7 +40,7 @@ RUN . venv/bin/activate && python3 -m grpc_tools.protoc -I../../libs/common/src/
 WORKDIR /usr/src/app
 
 # Expose ports
-EXPOSE 3000 50051 50052 50053 6379
+EXPOSE 3000 50051 50052 50053 50054 6379
 
 # Start command
 CMD ["./start.sh"]

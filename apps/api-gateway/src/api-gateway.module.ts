@@ -6,6 +6,7 @@ import { ApiGatewayService } from './api-gateway.service';
 import { AuthController } from './auth.controller';
 import { UserController } from './user.controller';
 import { SummaryController } from './summary.controller';
+import { HealthController } from './health.controller';
 import { RedisModule } from './redis.module';
 
 @Module({
@@ -30,9 +31,18 @@ import { RedisModule } from './redis.module';
           protoPath: join(__dirname, '../../../libs/common/src/proto/summary.proto'),
         },
       },
+      {
+        name: 'HEALTH_SERVICE',
+        transport: Transport.GRPC,
+        options: {
+          url: process.env.HEALTH_SERVICE_URL || 'localhost:50054',
+          package: 'health',
+          protoPath: join(__dirname, '../../../libs/common/src/proto/health.proto'),
+        },
+      },
     ]),
   ],
-  controllers: [ApiGatewayController, AuthController, UserController, SummaryController],
+  controllers: [ApiGatewayController, AuthController, UserController, SummaryController, HealthController],
   providers: [ApiGatewayService],
 })
 export class ApiGatewayModule { }
