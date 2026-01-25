@@ -32,7 +32,7 @@ class SyncLogsDto {
 }
 
 interface HealthService {
-    syncLogs(data: { userId: number; logs: any[] }): Observable<any>;
+    syncLogs(data: any): Observable<any>;
 }
 
 @ApiTags('health')
@@ -54,10 +54,11 @@ export class HealthController implements OnModuleInit {
         // Mock userId for now
         const userId = 1;
 
-        // Map incoming REST payload (with 'data' wrapper) to Flat gRPC Message
+        // Map incoming REST payload (with 'data' wrapper) to Flat gRPC Message (snake_case for proto)
         const grpcLogs = body.logs.map(log => ({
             id: log.id,
-            heartRate: log.data.heartRate,
+            // Explicitly use snake_case to match proto definition
+            heart_rate: log.data.heartRate,
             spo2: log.data.spo2,
             temperature: log.data.temperature,
             // Use the timestamp from 'data' (measurement time)
@@ -66,6 +67,7 @@ export class HealthController implements OnModuleInit {
 
         console.log(`[HealthController] Syncing ${grpcLogs.length} logs for user ${userId}`);
 
-        return lastValueFrom(this.healthService.syncLogs({ userId, logs: grpcLogs }));
+        // Send snake_case keys matches proto definition
+        return lastValueFrom(this.healthService.syncLogs({ user_id: userId, logs: grpcLogs }));
     }
 }

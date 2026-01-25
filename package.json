@@ -36,6 +36,8 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/swagger": "^11.2.5",
     "@nestjs/typeorm": "^11.0.0",
+    "@types/compression": "^1.8.1",
+    "compression": "^1.8.1",
     "pg": "^8.17.1",
     "redis": "^5.10.0",
     "reflect-metadata": "^0.2.2",

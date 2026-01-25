@@ -14,6 +14,15 @@ async function bootstrap() {
       package: 'health',
       protoPath: join(__dirname, '../../../libs/common/src/proto/health.proto'),
       url: process.env.HEALTH_GRPC_URL || '0.0.0.0:50054',
+      loader: {
+        keepCase: true,
+        defaults: true,
+        json: true,
+        arrays: true,
+      },
+      // Set to 100 MB
+      maxReceiveMessageLength: 100 * 1024 * 1024,
+      maxSendMessageLength: 100 * 1024 * 1024,
     },
   });
   await app.listen();

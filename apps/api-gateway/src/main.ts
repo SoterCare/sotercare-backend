@@ -2,8 +2,14 @@ import { NestFactory } from '@nestjs/core';
 import { ApiGatewayModule } from './api-gateway.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
+import { json, urlencoded } from 'express';
+import compression from 'compression';
+
 async function bootstrap() {
   const app = await NestFactory.create(ApiGatewayModule);
+  app.use(json({ limit: '50mb' }));
+  app.use(urlencoded({ extended: true, limit: '50mb' }));
+  app.use(compression());
 
   const config = new DocumentBuilder()
     .setTitle('Auth Microservices API')

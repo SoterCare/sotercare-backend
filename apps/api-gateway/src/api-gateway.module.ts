@@ -38,6 +38,15 @@ import { RedisModule } from './redis.module';
           url: process.env.HEALTH_SERVICE_URL || 'localhost:50054',
           package: 'health',
           protoPath: join(__dirname, '../../../libs/common/src/proto/health.proto'),
+          loader: {
+            keepCase: true,
+            defaults: true,
+            json: true,
+            arrays: true,
+          },
+          // Set to 100 MB
+          maxReceiveMessageLength: 100 * 1024 * 1024,
+          maxSendMessageLength: 100 * 1024 * 1024,
         },
       },
     ]),

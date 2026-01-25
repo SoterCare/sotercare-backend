@@ -7,8 +7,14 @@ export class HealthServiceController {
   constructor(private readonly healthService: HealthServiceService) { }
 
   @GrpcMethod('HealthService', 'SyncLogs')
-  async syncLogs(data: { userId: number; logs: any[] }) {
-    console.log(`[HealthService] Syncing ${data.logs?.length} logs for user ${data.userId}`);
-    return this.healthService.syncLogs(data.userId, data.logs);
+  async syncLogs(data: any) {
+
+
+    // Map snake_case (from proto with keepCase: true) or camelCase accordingly
+    const userId = data.user_id || data.userId;
+    const logs = data.logs || [];
+
+    console.log(`[HealthService] Syncing ${logs?.length} logs for user ${userId}`);
+    return this.healthService.syncLogs(userId, logs);
   }
 }
