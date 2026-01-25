@@ -13,13 +13,13 @@ export class VitalSign {
     heartRate: number;
 
     @Column('float')
-    oxygen: number;
+    spo2: number;
 
     @Column('float')
     temperature: number;
 
     @Column({ type: 'bigint' })
-    timestamp: number; // Unix timestamp from device
+    timestamp: string; // Storing as string to handle BigInt safely
 
     @CreateDateColumn()
     syncedAt: Date;

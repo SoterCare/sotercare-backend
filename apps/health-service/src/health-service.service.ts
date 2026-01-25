@@ -19,9 +19,10 @@ export class HealthServiceService {
       const entity = new VitalSign();
       entity.userId = userId;
       entity.heartRate = log.heartRate;
-      entity.oxygen = log.oxygen;
+      entity.spo2 = log.spo2;
       entity.temperature = log.temperature;
-      entity.timestamp = log.timestamp;
+      entity.timestamp = log.timestamp ? log.timestamp.toString() : Date.now().toString();
+      console.log(`[HealthService] Processing Log: User=${userId}, TS=${entity.timestamp}, HR=${entity.heartRate}`);
       return entity;
     });
 

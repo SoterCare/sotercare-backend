@@ -4,17 +4,26 @@ import { ApiTags, ApiOperation, ApiBody, ApiProperty, ApiBearerAuth } from '@nes
 import { Observable, lastValueFrom } from 'rxjs';
 import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
 
-class LogEntryDto {
-    @ApiProperty()
-    id: number;
+class VitalDataDto {
     @ApiProperty()
     heartRate: number;
     @ApiProperty()
-    oxygen: number;
+    spo2: number;
     @ApiProperty()
     temperature: number;
     @ApiProperty()
     timestamp: number;
+}
+
+class LogEntryDto {
+    @ApiProperty()
+    id: number;
+
+    @ApiProperty()
+    data: VitalDataDto;
+
+    @ApiProperty()
+    timestamp: string; // ISO String from the outer object
 }
 
 class SyncLogsDto {
@@ -42,18 +51,21 @@ export class HealthController implements OnModuleInit {
     @ApiOperation({ summary: 'Sync vital sign logs' })
     @ApiBody({ type: SyncLogsDto })
     async syncLogs(@Body() body: SyncLogsDto) {
-        // In a real app, extract userId from JWT @Req()
+        // Mock userId for now
         const userId = 1;
 
-        // Explicitly map to ensure clean object structure
-        const logs = body.logs.map(log => ({
+        // Map incoming REST payload (with 'data' wrapper) to Flat gRPC Message
+        const grpcLogs = body.logs.map(log => ({
             id: log.id,
-            heartRate: log.heartRate,
-            oxygen: log.oxygen,
-            temperature: log.temperature,
-            timestamp: log.timestamp
+            heartRate: log.data.heartRate,
+            spo2: log.data.spo2,
+            temperature: log.data.temperature,
+            // Use the timestamp from 'data' (measurement time)
+            timestamp: log.data.timestamp
         }));
 
-        return lastValueFrom(this.healthService.syncLogs({ userId, logs }));
+        console.log(`[HealthController] Syncing ${grpcLogs.length} logs for user ${userId}`);
+
+        return lastValueFrom(this.healthService.syncLogs({ userId, logs: grpcLogs }));
     }
 }
