@@ -1,8 +1,9 @@
-import { Body, Controller, Inject, OnModuleInit, Post, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Inject, OnModuleInit, Post, UseInterceptors, UseGuards } from '@nestjs/common';
 import type { ClientGrpc } from '@nestjs/microservices';
 import { Observable, lastValueFrom } from 'rxjs';
-import { ApiTags, ApiOperation, ApiBody, ApiProperty } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBody, ApiProperty, ApiBearerAuth } from '@nestjs/swagger';
 import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 class SummarizeDto {
     @ApiProperty({ example: 'Long text to summarize...' })
@@ -14,7 +15,9 @@ interface SummaryService {
 }
 
 @ApiTags('summary')
+@ApiBearerAuth()
 @Controller('summary')
+@UseGuards(JwtAuthGuard)
 @UseInterceptors(IdempotencyInterceptor)
 export class SummaryController implements OnModuleInit {
     private summaryService: SummaryService;

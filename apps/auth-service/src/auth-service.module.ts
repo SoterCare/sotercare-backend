@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
 import { join } from 'path';
 import { createClient } from 'redis';
 import { AuthServiceController } from './auth-service.controller';
@@ -10,6 +11,11 @@ import { User } from './user.entity';
 
 @Module({
   imports: [
+    JwtModule.register({
+      global: true,
+      secret: process.env.JWT_SECRET || 'REMOVED-OLD-PUBLIC-FALLBACK',
+      signOptions: { expiresIn: '90d' },
+    }),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',

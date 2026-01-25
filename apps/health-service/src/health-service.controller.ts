@@ -17,4 +17,12 @@ export class HealthServiceController {
     console.log(`[HealthService] Syncing ${logs?.length} logs for user ${userId}`);
     return this.healthService.syncLogs(userId, logs);
   }
+
+  @GrpcMethod('HealthService', 'GetLogDates')
+  async getLogDates(data: any) {
+    const userId = data.user_id || data.userId;
+    console.log(`[HealthService] Fetching log dates for user ${userId}`);
+    const dates = await this.healthService.getLogDates(userId);
+    return { dates };
+  }
 }

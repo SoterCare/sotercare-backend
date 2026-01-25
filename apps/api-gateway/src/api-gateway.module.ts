@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
+import { PassportModule } from '@nestjs/passport'; // Import PassportModule
 import { join } from 'path';
 import { ApiGatewayController } from './api-gateway.controller';
 import { ApiGatewayService } from './api-gateway.service';
@@ -8,9 +9,11 @@ import { UserController } from './user.controller';
 import { SummaryController } from './summary.controller';
 import { HealthController } from './health.controller';
 import { RedisModule } from './redis.module';
+import { JwtStrategy } from './auth/jwt.strategy'; // Import JwtStrategy
 
 @Module({
   imports: [
+    PassportModule, // Register PassportModule
     RedisModule,
     ClientsModule.register([
       {
@@ -52,6 +55,6 @@ import { RedisModule } from './redis.module';
     ]),
   ],
   controllers: [ApiGatewayController, AuthController, UserController, SummaryController, HealthController],
-  providers: [ApiGatewayService],
+  providers: [ApiGatewayService, JwtStrategy], // Add JwtStrategy
 })
 export class ApiGatewayModule { }

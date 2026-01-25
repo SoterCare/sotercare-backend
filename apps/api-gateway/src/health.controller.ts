@@ -1,9 +1,11 @@
-import { Controller, Post, Body, Inject, OnModuleInit, UseInterceptors, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Get, Body, Inject, OnModuleInit, UseInterceptors, UseGuards, Req, Query } from '@nestjs/common';
 import type { ClientGrpc } from '@nestjs/microservices';
-import { ApiTags, ApiOperation, ApiBody, ApiProperty, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBody, ApiProperty, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Observable, lastValueFrom } from 'rxjs';
 import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard'; // Import Guard
 
+// ... (DTOs unchanged) ...
 class VitalDataDto {
     @ApiProperty()
     heartRate: number;
@@ -33,10 +35,13 @@ class SyncLogsDto {
 
 interface HealthService {
     syncLogs(data: any): Observable<any>;
+    getLogDates(data: any): Observable<any>;
 }
 
 @ApiTags('health')
+@ApiBearerAuth() // Swagger Auth
 @Controller('logs')
+@UseGuards(JwtAuthGuard) // Protect all routes
 @UseInterceptors(IdempotencyInterceptor)
 export class HealthController implements OnModuleInit {
     private healthService: HealthService;
@@ -50,9 +55,8 @@ export class HealthController implements OnModuleInit {
     @Post('sync')
     @ApiOperation({ summary: 'Sync vital sign logs' })
     @ApiBody({ type: SyncLogsDto })
-    async syncLogs(@Body() body: SyncLogsDto) {
-        // Mock userId for now
-        const userId = 1;
+    async syncLogs(@Body() body: SyncLogsDto, @Req() req: any) {
+        const userId = req.user.userId; // Get from JWT
 
         // Map incoming REST payload (with 'data' wrapper) to Flat gRPC Message (snake_case for proto)
         const grpcLogs = body.logs.map(log => ({
@@ -69,5 +73,13 @@ export class HealthController implements OnModuleInit {
 
         // Send snake_case keys matches proto definition
         return lastValueFrom(this.healthService.syncLogs({ user_id: userId, logs: grpcLogs }));
+    }
+
+    @Get('dates')
+    @ApiOperation({ summary: 'Get dates with available logs' })
+    async getLogDates(@Req() req: any) {
+        const userId = req.user.userId; // Get from JWT
+        console.log(`[HealthController] Fetching log dates for user ${userId}`);
+        return lastValueFrom(this.healthService.getLogDates({ user_id: userId }));
     }
 }

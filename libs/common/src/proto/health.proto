@@ -2,9 +2,7 @@ syntax = "proto3";
 
 package health;
 
-service HealthService {
-  rpc SyncLogs (SyncLogsRequest) returns (SyncLogsResponse);
-}
+
 
 message LogEntry {
   int32 id = 1; // Clients local ID
@@ -19,8 +17,22 @@ message SyncLogsRequest {
   repeated LogEntry logs = 2;
 }
 
+
 message SyncLogsResponse {
   bool success = 1;
   string message = 2;
   int32 synced_count = 3;
+}
+
+message GetLogDatesRequest {
+  int32 user_id = 1;
+}
+
+message GetLogDatesResponse {
+  repeated string dates = 1; // List of dates in YYYY-MM-DD format
+}
+
+service HealthService {
+  rpc SyncLogs (SyncLogsRequest) returns (SyncLogsResponse);
+  rpc GetLogDates (GetLogDatesRequest) returns (GetLogDatesResponse);
 }

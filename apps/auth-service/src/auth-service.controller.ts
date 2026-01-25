@@ -1,6 +1,7 @@
 import { Controller, Inject, OnModuleInit } from '@nestjs/common';
 import { GrpcMethod } from '@nestjs/microservices';
 import type { ClientGrpc } from '@nestjs/microservices';
+import { JwtService } from '@nestjs/jwt'; // Import JwtService
 import { Observable, lastValueFrom, of } from 'rxjs';
 import { AuthServiceService } from './auth-service.service';
 
@@ -14,12 +15,15 @@ export class AuthServiceController implements OnModuleInit {
 
   constructor(
     private readonly authService: AuthServiceService,
+    private readonly jwtService: JwtService, // Inject JwtService
     @Inject('EMAIL_SERVICE') private client: ClientGrpc,
   ) { }
 
   onModuleInit() {
     this.emailService = this.client.getService<EmailService>('EmailService');
   }
+
+  // ... (RegisterUser unchanged)
 
   @GrpcMethod('AuthService', 'RegisterUser')
   async registerUser(data: { name: string; email: string }): Promise<{ success: boolean; message: string }> {
@@ -48,8 +52,14 @@ export class AuthServiceController implements OnModuleInit {
       return { success: false, message: 'Invalid OTP' };
     }
     const user = await this.authService.createUser(data.email);
-    // Mock Token Generation
-    const accessToken = Buffer.from(JSON.stringify({ sub: user.id, email: user.email })).toString('base64');
+    // Real JWT Generation matching frontend interface
+    const payload = {
+      userId: user.id.toString(),
+      sub: user.id,
+      email: user.email,
+      name: user.name
+    };
+    const accessToken = this.jwtService.sign(payload);
 
     return {
       success: true,
@@ -90,7 +100,13 @@ export class AuthServiceController implements OnModuleInit {
       if (!user) {
         return { success: false, message: 'User not found', accessToken: '' };
       }
-      const accessToken = Buffer.from(JSON.stringify({ sub: user.id, email: user.email })).toString('base64');
+      const payload = {
+        userId: user.id.toString(),
+        sub: user.id,
+        email: user.email,
+        name: user.name
+      };
+      const accessToken = this.jwtService.sign(payload);
       return { success: true, message: 'Login successful', accessToken, user };
     }
     console.log(`[LoginVerify] Invalid OTP for ${data.email}`);

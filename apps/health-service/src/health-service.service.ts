@@ -35,4 +35,29 @@ export class HealthServiceService {
       syncedCount: entities.length,
     };
   }
+
+  async getLogDates(userId: number): Promise<string[]> {
+    // Query distinct timestamps, convert to date string, and filter
+    const rawData = await this.vitalSignRepository
+      .createQueryBuilder('vital')
+      .select('vital.timestamp', 'timestamp')
+      .where('vital.userId = :userId', { userId })
+      .orderBy('vital.timestamp', 'DESC')
+      .getRawMany();
+
+    // Set to store unique dates (YYYY-MM-DD)
+    const dates = new Set<string>();
+
+    rawData.forEach(row => {
+      // Timestamp is stored as BigInt string or string, convert to number/Date
+      // If timestamp is purely numeric string
+      const ts = Number(row.timestamp);
+      if (!isNaN(ts)) {
+        const date = new Date(ts).toISOString().split('T')[0];
+        dates.add(date);
+      }
+    });
+
+    return Array.from(dates);
+  }
 }
