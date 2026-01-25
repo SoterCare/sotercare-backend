@@ -10,7 +10,7 @@ class LogEntryDto {
     @ApiProperty()
     heartRate: number;
     @ApiProperty()
-    spo2: number;
+    oxygen: number;
     @ApiProperty()
     temperature: number;
     @ApiProperty()
@@ -43,9 +43,17 @@ export class HealthController implements OnModuleInit {
     @ApiBody({ type: SyncLogsDto })
     async syncLogs(@Body() body: SyncLogsDto) {
         // In a real app, extract userId from JWT @Req()
-        // For now, using a mock userId of 1 or getting it from body if auth is not ready
         const userId = 1;
 
-        return lastValueFrom(this.healthService.syncLogs({ userId, logs: body.logs }));
+        // Explicitly map to ensure clean object structure
+        const logs = body.logs.map(log => ({
+            id: log.id,
+            heartRate: log.heartRate,
+            oxygen: log.oxygen,
+            temperature: log.temperature,
+            timestamp: log.timestamp
+        }));
+
+        return lastValueFrom(this.healthService.syncLogs({ userId, logs }));
     }
 }

@@ -13,7 +13,7 @@ export class VitalSign {
     heartRate: number;
 
     @Column('float')
-    spo2: number;
+    oxygen: number;
 
     @Column('float')
     temperature: number;

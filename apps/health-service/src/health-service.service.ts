@@ -19,7 +19,7 @@ export class HealthServiceService {
       const entity = new VitalSign();
       entity.userId = userId;
       entity.heartRate = log.heartRate;
-      entity.spo2 = log.spo2;
+      entity.oxygen = log.oxygen;
       entity.temperature = log.temperature;
       entity.timestamp = log.timestamp;
       return entity;
