@@ -29,9 +29,12 @@ RUN npm run build:auth
 RUN npm run build:email
 RUN npm run build:health
 
-# Install Python dependencies globally (no venv needed in container)
+# Install Python dependencies using a virtual environment
 WORKDIR /usr/src/app/apps/ai-summary-service
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
+RUN pip3 install --no-cache-dir --default-timeout=100 -r requirements.txt
 
 # Create __init__.py files for Python package structure
 RUN touch src/__init__.py src/core/__init__.py src/generated/__init__.py
