@@ -1,5 +1,5 @@
-# Use Node.js 18 as the base image
-FROM node:18-bullseye
+# Use Node.js 20 on Debian Bookworm (Python 3.11 available by default)
+FROM node:20-bookworm
 
 # Install Python 3 and pip
 RUN apt-get update && apt-get install -y python3 python3-pip python3-venv
@@ -34,7 +34,8 @@ WORKDIR /usr/src/app/apps/ai-summary-service
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
-RUN pip3 install --no-cache-dir --default-timeout=100 -r requirements.txt
+RUN pip3 install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+RUN pip3 install --no-cache-dir --default-timeout=300 -r requirements.txt
 
 # Create __init__.py files for Python package structure
 RUN touch src/__init__.py src/core/__init__.py src/generated/__init__.py
