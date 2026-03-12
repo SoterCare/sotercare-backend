@@ -331,3 +331,238 @@ When updating email, a two-step verification process is required:
     -   `ai-summary-service`: Python-based AI summary microservice.
 -   `libs/common/src/proto`: Shared Protobuf definitions (`auth.proto`, `email.proto`, `summary.proto`).
 
+## SoterCare Sync APIs
+
+The API gateway now includes a Postgres-backed sync and read layer for device telemetry. The backend does **not** connect directly to Raspberry Pi or BLE devices. Instead, the mobile app syncs a payload to the cloud, and the gateway stores normalized device, vitals, alert, recording, and sync-history data.
+
+### Required Environment Variables
+
+Add these to your root `.env` file when running the API gateway locally:
+
+```env
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASS=postgres
+DB_NAME=auth_db
+DEVICE_ONLINE_TTL_SECONDS=300
+JWT_SECRET=your_jwt_secret
+```
+
+### Database Notes
+
+-   The new sync tables are created by TypeORM in `apps/api-gateway`.
+-   Start the gateway at least once before seeding so TypeORM can create the tables.
+-   The current implementation uses `synchronize: true`, so this is suited for development environments.
+
+### Demo Seed Data
+
+Run the API gateway once, then seed realistic demo data:
+
+```bash
+npm run seed:sync-data
+```
+
+The seed inserts:
+
+-   1 demo user (or updates it if it already exists)
+-   2 devices
+-   2 latest device status snapshots
+-   48 hours of vitals at 15-minute intervals for both devices
+-   20 alerts across mixed alert types
+-   3 recording sessions
+-   1 sync history record
+
+Optional seed overrides:
+
+```env
+SEED_USER_EMAIL=elder.demo@example.com
+SEED_USER_NAME=Elder Demo
+SEED_USER_MOBILE=+94770000000
+SEED_GATEWAY_HOST=seed-script
+```
+
+### Authenticated Endpoints
+
+All endpoints below require a Bearer token issued by the existing auth flow.
+
+Set a shell variable first:
+
+```bash
+TOKEN=<your_jwt_token>
+```
+
+### `POST /sync/raspberry-pi`
+
+Receives a mobile-synced Raspberry Pi batch and stores normalized cloud records with idempotency handling.
+
+```bash
+curl -X POST http://localhost:3000/sync/raspberry-pi \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": "mobile_sync",
+    "slot": "2025-03-10T08-00-00Z",
+    "syncedAt": "2025-03-10T08:00:00.000Z",
+    "gatewayHost": "android-app",
+    "devices": [
+      {
+        "id": "hub-room-01",
+        "name": "Room Hub 01",
+        "type": "hub",
+        "lastSeenAt": "2025-03-10T07:58:00.000Z"
+      }
+    ],
+    "deviceStatuses": [
+      {
+        "deviceId": "hub-room-01",
+        "battery": 92,
+        "signalRssi": -48,
+        "connectedAt": "2025-03-10T07:20:00.000Z",
+        "receivedAt": "2025-03-10T08:00:00.000Z",
+        "bands": [{ "name": "Thigh Band 01", "status": "connected" }]
+      }
+    ],
+    "latestVitals": [
+      {
+        "deviceId": "hub-room-01",
+        "timestamp": "2025-03-10T07:59:00.000Z",
+        "temperature": 36.7,
+        "roomTemperature": 28.4,
+        "moisture": 43,
+        "gaitAnalysis": "normal gait"
+      }
+    ],
+    "recentAlerts": [
+      {
+        "id": "alert-1001",
+        "deviceId": "hub-room-01",
+        "type": "movement",
+        "title": "MOVEMENT alert",
+        "timestamp": "2025-03-10T07:55:00.000Z"
+      }
+    ],
+    "recordingSessions": [
+      {
+        "recordingId": "rec-1001",
+        "deviceId": "hub-room-01",
+        "createdAt": "2025-03-10T07:30:00.000Z",
+        "syncedAt": "2025-03-10T08:00:00.000Z"
+      }
+    ]
+  }'
+```
+
+### `GET /devices`
+
+Returns the authenticated user’s devices. Use `includeStatus=true` to attach the latest status snapshot, or `fields=minimal` for dropdowns.
+
+```bash
+curl "http://localhost:3000/devices?includeStatus=true" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```bash
+curl "http://localhost:3000/devices?fields=minimal" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### `GET /devices/:deviceId/status`
+
+Returns the latest status snapshot plus inferred `online` / `offline` state based on `DEVICE_ONLINE_TTL_SECONDS`.
+
+```bash
+curl http://localhost:3000/devices/hub-room-01/status \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### `GET /reports/devices`
+
+Convenience route for minimal report dropdown options.
+
+```bash
+curl http://localhost:3000/reports/devices \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### `GET /dashboard/vitals/latest`
+
+Returns the latest synced vitals for a given device.
+
+```bash
+curl "http://localhost:3000/dashboard/vitals/latest?deviceId=hub-room-01" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### `GET /alerts/recent`
+
+Returns recent non-dismissed alerts, optionally filtered by device.
+
+```bash
+curl "http://localhost:3000/alerts/recent?deviceId=hub-room-01&limit=10" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Timeline Endpoints
+
+#### `GET /timeline/vitals`
+
+```bash
+curl "http://localhost:3000/timeline/vitals?deviceId=hub-room-01&metric=temperature&range=day&date=2025-03-10" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+#### `GET /timeline/events`
+
+```bash
+curl "http://localhost:3000/timeline/events?deviceId=hub-room-01&eventType=all&range=week&date=2025-03-10" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+#### `GET /timeline/stats`
+
+```bash
+curl "http://localhost:3000/timeline/stats?deviceId=hub-room-01&metric=temperature&range=month&date=2025-03-01" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+#### `GET /timeline/date-options`
+
+```bash
+curl "http://localhost:3000/timeline/date-options?deviceId=hub-room-01&range=week" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+#### `GET /timeline/dismissed`
+
+```bash
+curl "http://localhost:3000/timeline/dismissed?deviceId=hub-room-01" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+#### `POST /timeline/dismiss`
+
+```bash
+curl -X POST http://localhost:3000/timeline/dismiss \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "deviceId": "hub-room-01",
+    "type": "alert",
+    "id": "seed-alert-01"
+  }'
+```
+
+#### `POST /timeline/restore`
+
+```bash
+curl -X POST http://localhost:3000/timeline/restore \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "deviceId": "hub-room-01",
+    "type": "alert",
+    "id": "seed-alert-01"
+  }'
+```
+

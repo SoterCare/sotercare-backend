@@ -1,0 +1,59 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { In, Repository } from 'typeorm';
+import { Alert, Device } from '../database/entities';
+
+@Injectable()
+export class AlertsService {
+  constructor(
+    @InjectRepository(Alert)
+    private readonly alertRepository: Repository<Alert>,
+    @InjectRepository(Device)
+    private readonly deviceRepository: Repository<Device>,
+  ) {}
+
+  async getRecentAlerts(userId: number, deviceId?: string, limit = 20) {
+    let deviceIds: string[] = [];
+
+    if (deviceId) {
+      const device = await this.deviceRepository.findOne({
+        where: { id: deviceId, userId },
+      });
+
+      if (!device) {
+        throw new NotFoundException(
+          'Device not found or does not belong to user',
+        );
+      }
+
+      deviceIds = [deviceId];
+    } else {
+      const devices = await this.deviceRepository.find({ where: { userId } });
+      deviceIds = devices.map((device) => device.id);
+    }
+
+    if (deviceIds.length === 0) {
+      return { alerts: [], total: 0 };
+    }
+
+    const alerts = await this.alertRepository.find({
+      where: {
+        deviceId: In(deviceIds),
+        isDismissed: false,
+      },
+      order: { timestamp: 'DESC' },
+      take: limit,
+    });
+
+    return {
+      alerts: alerts.map((alert) => ({
+        id: alert.id,
+        type: alert.type,
+        title: alert.title,
+        timestamp: alert.timestamp,
+        deviceId: alert.deviceId,
+      })),
+      total: alerts.length,
+    };
+  }
+}

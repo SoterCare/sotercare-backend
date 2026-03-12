@@ -19,6 +19,7 @@
     "start:prod:all": "concurrently \"node dist/apps/api-gateway/main\" \"node dist/apps/auth-service/main\" \"node dist/apps/email-service/main\" \"node dist/apps/health-service/main\" \"cd apps/ai-summary-service && python3 src/main.py\"",
     "start:ai-service": "cd apps/ai-summary-service && venv\\Scripts\\python main.py",
     "start:all": "concurrently \"npm run start:dev api-gateway\" \"npm run start:dev auth-service\" \"npm run start:dev email-service\" \"npm run start:dev health-service\" \"npm run start:ai-service\"",
+    "seed:sync-data": "ts-node scripts/seed-sync-data.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",

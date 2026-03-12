@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
-import { PassportModule } from '@nestjs/passport'; // Import PassportModule
+import { PassportModule } from '@nestjs/passport';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { join } from 'path';
 import { ApiGatewayController } from './api-gateway.controller';
 import { ApiGatewayService } from './api-gateway.service';
@@ -8,14 +10,42 @@ import { AuthController } from './auth.controller';
 import { UserController } from './user.controller';
 import { SummaryController } from './summary.controller';
 import { HealthController } from './health.controller';
-import { ReportsController } from './reports.controller'; // Import
+import { ReportsController } from './reports.controller';
 import { RedisModule } from './redis.module';
-import { JwtStrategy } from './auth/jwt.strategy'; // Import JwtStrategy
+import { JwtStrategy } from './auth/jwt.strategy';
+import { AlertsModule } from './alerts/alerts.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { DevicesModule } from './devices/devices.module';
+import { SyncModule } from './sync/sync.module';
+import { TimelineModule } from './timeline/timeline.module';
 
 @Module({
   imports: [
-    PassportModule, // Register PassportModule
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
+    }),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        type: 'postgres',
+        host: configService.get('DB_HOST', '127.0.0.1'),
+        port: Number(configService.get('DB_PORT', 5432)),
+        username: configService.get('DB_USER', 'postgres'),
+        password: configService.get('DB_PASS', 'postgres'),
+        database: configService.get('DB_NAME', 'auth_db'),
+        autoLoadEntities: true,
+        synchronize: true,
+      }),
+      inject: [ConfigService],
+    }),
+    PassportModule,
     RedisModule,
+    SyncModule,
+    DevicesModule,
+    DashboardModule,
+    AlertsModule,
+    TimelineModule,
     ClientsModule.register([
       {
         name: 'AUTH_SERVICE',
@@ -64,7 +94,14 @@ import { JwtStrategy } from './auth/jwt.strategy'; // Import JwtStrategy
       },
     ]),
   ],
-  controllers: [ApiGatewayController, AuthController, UserController, SummaryController, HealthController, ReportsController], // Add Controller
-  providers: [ApiGatewayService, JwtStrategy], // Add JwtStrategy
+  controllers: [
+    ApiGatewayController,
+    AuthController,
+    UserController,
+    SummaryController,
+    HealthController,
+    ReportsController,
+  ],
+  providers: [ApiGatewayService, JwtStrategy],
 })
-export class ApiGatewayModule { }
+export class ApiGatewayModule {}

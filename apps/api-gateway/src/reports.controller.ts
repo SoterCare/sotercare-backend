@@ -1,9 +1,10 @@
-import { Body, Controller, Inject, OnModuleInit, Post, UseInterceptors, UseGuards, Req } from '@nestjs/common';
+import { Body, Controller, Get, Inject, OnModuleInit, Post, UseInterceptors, UseGuards, Req } from '@nestjs/common';
 import type { ClientGrpc } from '@nestjs/microservices';
 import { Observable, lastValueFrom } from 'rxjs';
 import { ApiTags, ApiOperation, ApiBody, ApiProperty, ApiBearerAuth } from '@nestjs/swagger';
 import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { DevicesService } from './devices/devices.service';
 
 class MetricsDto {
     @ApiProperty()
@@ -56,7 +57,8 @@ export class ReportsController implements OnModuleInit {
 
     constructor(
         @Inject('HEALTH_SERVICE') private healthClient: ClientGrpc,
-        @Inject('SUMMARY_SERVICE') private summaryClient: ClientGrpc
+        @Inject('SUMMARY_SERVICE') private summaryClient: ClientGrpc,
+        private readonly devicesService: DevicesService,
     ) { }
 
     onModuleInit() {
@@ -119,6 +121,15 @@ export class ReportsController implements OnModuleInit {
             },
             report: aiAnalysis.summary,
             recommendations: aiAnalysis.recommendations
+        };
+    }
+
+    @Get('devices')
+    @ApiOperation({ summary: 'Get minimal device list for report dropdowns' })
+    async getReportDevices(@Req() req: any) {
+        return {
+            success: true,
+            data: await this.devicesService.getDevices(req.user.userId, false, true),
         };
     }
 }
