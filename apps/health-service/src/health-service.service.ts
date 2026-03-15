@@ -19,10 +19,19 @@ export class HealthServiceService {
       const entity = new VitalSign();
       entity.userId = userId;
       // Handle potential snake_case from gRPC (keepCase: true)
-      entity.heartRate = log.heartRate ?? log.heart_rate;
-      entity.spo2 = log.spo2 ?? log.spo2; // spo2 is distinct enough, but checked
-      entity.temperature = log.temperature ?? log.temperature;
-      entity.timestamp = log.timestamp ? log.timestamp.toString() : Date.now().toString();
+      entity.heartRate = log.heartRate ?? log.heart_rate ?? 0;
+      entity.spo2 = log.spo2 ?? 0;
+      entity.temperature = log.temperature ?? log.temp ?? 0;
+      entity.accX = log.accX ?? log.acc_x ?? null;
+      entity.accY = log.accY ?? log.acc_y ?? null;
+      entity.accZ = log.accZ ?? log.acc_z ?? null;
+      entity.gTotal = log.gTotal ?? log.g_total ?? null;
+      entity.ambientTemp = log.ambientTemp ?? log.ambient_temp ?? null;
+      entity.moisture = log.moisture ?? null;
+      entity.sos = log.sos ?? null;
+      entity.fallAlert = log.fallAlert ?? log.fall_alert ?? null;
+      entity.gaitLabel = log.gaitLabel ?? log.gait_label ?? null;
+      entity.timestamp = (log.timestamp ?? log.ts ?? Date.now()).toString();
 
       return entity;
     });

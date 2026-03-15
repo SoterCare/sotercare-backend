@@ -1,26 +1,59 @@
-import { Entity, Column, PrimaryGeneratedColumn, Index, CreateDateColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  Index,
+  CreateDateColumn,
+} from 'typeorm';
 
 @Entity()
 export class VitalSign {
-    @PrimaryGeneratedColumn()
-    id: number;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-    @Index()
-    @Column()
-    userId: number; // Reference to Auth Service User ID
+  @Index()
+  @Column()
+  userId: number; // Reference to Auth Service User ID
 
-    @Column('float')
-    heartRate: number;
+  @Column('float')
+  heartRate: number;
 
-    @Column('float')
-    spo2: number;
+  @Column('float')
+  spo2: number;
 
-    @Column('float')
-    temperature: number;
+  @Column('float')
+  temperature: number;
 
-    @Column({ type: 'bigint' })
-    timestamp: string; // Storing as string to handle BigInt safely
+  @Column('float', { nullable: true })
+  accX: number | null;
 
-    @CreateDateColumn()
-    syncedAt: Date;
+  @Column('float', { nullable: true })
+  accY: number | null;
+
+  @Column('float', { nullable: true })
+  accZ: number | null;
+
+  @Column('float', { nullable: true })
+  gTotal: number | null;
+
+  @Column('float', { nullable: true })
+  ambientTemp: number | null;
+
+  @Column('float', { nullable: true })
+  moisture: number | null;
+
+  @Column({ type: 'boolean', nullable: true })
+  sos: boolean | null;
+
+  @Column({ type: 'boolean', nullable: true })
+  fallAlert: boolean | null;
+
+  @Column({ type: 'text', nullable: true })
+  gaitLabel: string | null;
+
+  @Column({ type: 'bigint' })
+  timestamp: string; // Storing as string to handle BigInt safely
+
+  @CreateDateColumn()
+  syncedAt: Date;
 }

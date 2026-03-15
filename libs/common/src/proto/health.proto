@@ -10,6 +10,15 @@ message LogEntry {
   float spo2 = 3;
   float temperature = 4;
   int64 timestamp = 5;
+  float acc_x = 6;
+  float acc_y = 7;
+  float acc_z = 8;
+  float g_total = 9;
+  float ambient_temp = 10;
+  float moisture = 11;
+  bool sos = 12;
+  bool fall_alert = 13;
+  string gait_label = 14;
 }
 
 message SyncLogsRequest {

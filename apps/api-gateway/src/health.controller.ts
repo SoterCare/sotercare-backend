@@ -1,85 +1,272 @@
-import { Controller, Post, Get, Body, Inject, OnModuleInit, UseInterceptors, UseGuards, Req, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Headers,
+  Inject,
+  OnModuleInit,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import type { ClientGrpc } from '@nestjs/microservices';
-import { ApiTags, ApiOperation, ApiBody, ApiProperty, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBody,
+  ApiProperty,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { Observable, lastValueFrom } from 'rxjs';
 import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
-import { JwtAuthGuard } from './common/guards/jwt-auth.guard'; // Import Guard
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
-// ... (DTOs unchanged) ...
+type AuthenticatedRequest = {
+  user: {
+    userId: number;
+  };
+};
+
 class VitalDataDto {
-    @ApiProperty()
-    heartRate: number;
-    @ApiProperty()
-    spo2: number;
-    @ApiProperty()
-    temperature: number;
-    @ApiProperty()
-    timestamp: number;
+  @ApiProperty()
+  heartRate: number;
+
+  @ApiProperty()
+  spo2: number;
+
+  @ApiProperty()
+  temperature: number;
+
+  @ApiProperty()
+  timestamp: number;
 }
 
 class LogEntryDto {
-    @ApiProperty()
-    id: number;
+  @ApiProperty()
+  id: number;
 
-    @ApiProperty()
-    data: VitalDataDto;
+  @ApiProperty()
+  data: VitalDataDto;
 
-    @ApiProperty()
-    timestamp: string; // ISO String from the outer object
+  @ApiProperty()
+  timestamp: string;
 }
 
 class SyncLogsDto {
-    @ApiProperty({ type: [LogEntryDto] })
-    logs: LogEntryDto[];
+  @ApiProperty({ type: [LogEntryDto] })
+  logs: LogEntryDto[];
+}
+
+class RaspberryLogDto {
+  @ApiProperty({ required: false })
+  id?: number;
+
+  @ApiProperty({ required: false })
+  heartRate?: number;
+
+  @ApiProperty({ required: false })
+  heart_rate?: number;
+
+  @ApiProperty({ required: false })
+  spo2?: number;
+
+  @ApiProperty({ required: false })
+  temperature?: number;
+
+  @ApiProperty({ required: false })
+  temp?: number;
+
+  @ApiProperty({ required: false })
+  timestamp?: number;
+
+  @ApiProperty({ required: false })
+  ts?: number;
+
+  @ApiProperty({ required: false })
+  accX?: number;
+
+  @ApiProperty({ required: false })
+  acc_x?: number;
+
+  @ApiProperty({ required: false })
+  accY?: number;
+
+  @ApiProperty({ required: false })
+  acc_y?: number;
+
+  @ApiProperty({ required: false })
+  accZ?: number;
+
+  @ApiProperty({ required: false })
+  acc_z?: number;
+
+  @ApiProperty({ required: false })
+  gTotal?: number;
+
+  @ApiProperty({ required: false })
+  g_total?: number;
+
+  @ApiProperty({ required: false })
+  ambientTemp?: number;
+
+  @ApiProperty({ required: false })
+  ambient_temp?: number;
+
+  @ApiProperty({ required: false })
+  moisture?: number;
+
+  @ApiProperty({ required: false })
+  sos?: boolean;
+
+  @ApiProperty({ required: false })
+  fallAlert?: boolean;
+
+  @ApiProperty({ required: false })
+  fall_alert?: boolean;
+
+  @ApiProperty({ required: false })
+  gaitLabel?: string;
+
+  @ApiProperty({ required: false })
+  gait_label?: string;
+}
+
+class RaspberrySyncDto {
+  @ApiProperty()
+  userId: number;
+
+  @ApiProperty({ type: [RaspberryLogDto] })
+  logs: RaspberryLogDto[];
 }
 
 interface HealthService {
-    syncLogs(data: any): Observable<any>;
-    getLogDates(data: any): Observable<any>;
+  syncLogs(data: unknown): Observable<unknown>;
+  getLogDates(data: unknown): Observable<unknown>;
+  getLogsByDateRange(data: unknown): Observable<unknown>;
 }
 
 @ApiTags('health')
-@ApiBearerAuth() // Swagger Auth
 @Controller('logs')
-@UseGuards(JwtAuthGuard) // Protect all routes
 @UseInterceptors(IdempotencyInterceptor)
 export class HealthController implements OnModuleInit {
-    private healthService: HealthService;
+  private healthService: HealthService;
 
-    constructor(@Inject('HEALTH_SERVICE') private client: ClientGrpc) { }
+  constructor(@Inject('HEALTH_SERVICE') private client: ClientGrpc) {}
 
-    onModuleInit() {
-        this.healthService = this.client.getService<HealthService>('HealthService');
+  onModuleInit() {
+    this.healthService = this.client.getService<HealthService>('HealthService');
+  }
+
+  @Post('sync')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Sync vital sign logs' })
+  @ApiBody({ type: SyncLogsDto })
+  async syncLogs(@Body() body: SyncLogsDto, @Req() req: AuthenticatedRequest) {
+    const userId = req.user.userId;
+
+    const grpcLogs = body.logs.map((log) => ({
+      id: log.id,
+      heart_rate: log.data.heartRate,
+      spo2: log.data.spo2,
+      temperature: log.data.temperature,
+      timestamp: log.data.timestamp,
+    }));
+
+    console.log(
+      `[HealthController] Syncing ${grpcLogs.length} logs for user ${userId}`,
+    );
+
+    return lastValueFrom(
+      this.healthService.syncLogs({ user_id: userId, logs: grpcLogs }),
+    );
+  }
+
+  @Post('raspberry/sync')
+  @ApiOperation({
+    summary: 'Raspberry Pi direct sync endpoint (backend managed)',
+  })
+  @ApiBody({ type: RaspberrySyncDto })
+  async syncRaspberryLogs(
+    @Body() body: RaspberrySyncDto,
+    @Headers('x-raspberry-key') raspberryKey?: string,
+  ) {
+    const expectedKey = process.env.RASPBERRY_API_KEY;
+    if (expectedKey && raspberryKey !== expectedKey) {
+      throw new ForbiddenException('Invalid Raspberry API key');
     }
 
-    @Post('sync')
-    @ApiOperation({ summary: 'Sync vital sign logs' })
-    @ApiBody({ type: SyncLogsDto })
-    async syncLogs(@Body() body: SyncLogsDto, @Req() req: any) {
-        const userId = req.user.userId; // Get from JWT
-
-        // Map incoming REST payload (with 'data' wrapper) to Flat gRPC Message (snake_case for proto)
-        const grpcLogs = body.logs.map(log => ({
-            id: log.id,
-            // Explicitly use snake_case to match proto definition
-            heart_rate: log.data.heartRate,
-            spo2: log.data.spo2,
-            temperature: log.data.temperature,
-            // Use the timestamp from 'data' (measurement time)
-            timestamp: log.data.timestamp
-        }));
-
-        console.log(`[HealthController] Syncing ${grpcLogs.length} logs for user ${userId}`);
-
-        // Send snake_case keys matches proto definition
-        return lastValueFrom(this.healthService.syncLogs({ user_id: userId, logs: grpcLogs }));
+    if (!body?.userId || !Array.isArray(body.logs)) {
+      throw new BadRequestException('userId and logs are required');
     }
 
-    @Get('dates')
-    @ApiOperation({ summary: 'Get dates with available logs' })
-    async getLogDates(@Req() req: any) {
-        const userId = req.user.userId; // Get from JWT
-        console.log(`[HealthController] Fetching log dates for user ${userId}`);
-        return lastValueFrom(this.healthService.getLogDates({ user_id: userId }));
+    const grpcLogs = body.logs.map((log, index) => ({
+      id: Number(log.id ?? index + 1),
+      heart_rate: Number(log.heartRate ?? log.heart_rate ?? 0),
+      spo2: Number(log.spo2 ?? 0),
+      temperature: Number(log.temperature ?? log.temp ?? 0),
+      timestamp: Number(log.timestamp ?? log.ts ?? Date.now()),
+      acc_x: log.accX ?? log.acc_x,
+      acc_y: log.accY ?? log.acc_y,
+      acc_z: log.accZ ?? log.acc_z,
+      g_total: log.gTotal ?? log.g_total,
+      ambient_temp: log.ambientTemp ?? log.ambient_temp,
+      moisture: log.moisture,
+      sos: Boolean(log.sos ?? false),
+      fall_alert: Boolean(log.fallAlert ?? log.fall_alert ?? false),
+      gait_label: log.gaitLabel ?? log.gait_label ?? '',
+    }));
+
+    return lastValueFrom(
+      this.healthService.syncLogs({ user_id: body.userId, logs: grpcLogs }),
+    );
+  }
+
+  @Get('dates')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get dates with available logs' })
+  async getLogDates(@Req() req: AuthenticatedRequest) {
+    const userId = req.user.userId;
+    console.log(`[HealthController] Fetching log dates for user ${userId}`);
+    return lastValueFrom(this.healthService.getLogDates({ user_id: userId }));
+  }
+
+  @Get('range')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get logs by date range (mobile read API)' })
+  @ApiQuery({
+    name: 'startDate',
+    required: true,
+    description: 'ISO 8601 start date',
+  })
+  @ApiQuery({
+    name: 'endDate',
+    required: true,
+    description: 'ISO 8601 end date',
+  })
+  async getLogsByDateRange(
+    @Req() req: AuthenticatedRequest,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    if (!startDate || !endDate) {
+      throw new BadRequestException('startDate and endDate are required');
     }
+
+    const userId = req.user.userId;
+    return lastValueFrom(
+      this.healthService.getLogsByDateRange({
+        user_id: userId,
+        start_date: startDate,
+        end_date: endDate,
+      }),
+    );
+  }
 }
