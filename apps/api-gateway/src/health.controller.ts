@@ -82,10 +82,10 @@ class RaspberryLogDto {
   temp?: number;
 
   @ApiProperty({ required: false })
-  timestamp?: number;
+  timestamp?: number | string;
 
   @ApiProperty({ required: false })
-  ts?: number;
+  ts?: number | string;
 
   @ApiProperty({ required: false })
   accX?: number;
@@ -137,8 +137,11 @@ class RaspberryLogDto {
 }
 
 class RaspberrySyncDto {
-  @ApiProperty()
-  userId: number;
+  @ApiProperty({ required: false })
+  userId?: number;
+
+  @ApiProperty({ required: false })
+  user_id?: number;
 
   @ApiProperty({ type: [RaspberryLogDto] })
   logs: RaspberryLogDto[];
@@ -155,6 +158,24 @@ interface HealthService {
 @UseInterceptors(IdempotencyInterceptor)
 export class HealthController implements OnModuleInit {
   private healthService: HealthService;
+
+  private toUnixMs(value: number | string | undefined): number {
+    if (value === undefined || value === null) {
+      return Date.now();
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+
+    const numeric = Number(value);
+    if (!Number.isNaN(numeric) && Number.isFinite(numeric)) {
+      return numeric;
+    }
+
+    const parsed = Date.parse(String(value));
+    return Number.isNaN(parsed) ? Date.now() : parsed;
+  }
 
   constructor(@Inject('HEALTH_SERVICE') private client: ClientGrpc) {}
 
@@ -201,8 +222,12 @@ export class HealthController implements OnModuleInit {
       throw new ForbiddenException('Invalid Raspberry API key');
     }
 
-    if (!body?.userId || !Array.isArray(body.logs)) {
-      throw new BadRequestException('userId and logs are required');
+    const userId = Number(body.userId ?? body.user_id);
+
+    if (!Number.isFinite(userId) || !Array.isArray(body.logs)) {
+      throw new BadRequestException(
+        'userId (or user_id) and logs are required',
+      );
     }
 
     const grpcLogs = body.logs.map((log, index) => ({
@@ -210,7 +235,7 @@ export class HealthController implements OnModuleInit {
       heart_rate: Number(log.heartRate ?? log.heart_rate ?? 0),
       spo2: Number(log.spo2 ?? 0),
       temperature: Number(log.temperature ?? log.temp ?? 0),
-      timestamp: Number(log.timestamp ?? log.ts ?? Date.now()),
+      timestamp: this.toUnixMs(log.timestamp ?? log.ts),
       acc_x: log.accX ?? log.acc_x,
       acc_y: log.accY ?? log.acc_y,
       acc_z: log.accZ ?? log.acc_z,
@@ -223,7 +248,7 @@ export class HealthController implements OnModuleInit {
     }));
 
     return lastValueFrom(
-      this.healthService.syncLogs({ user_id: body.userId, logs: grpcLogs }),
+      this.healthService.syncLogs({ user_id: userId, logs: grpcLogs }),
     );
   }
 
