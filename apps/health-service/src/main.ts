@@ -1,9 +1,7 @@
-// Polyfill for crypto in Node 18 for TypeORM/NestJS
-global.crypto = require('crypto');
+import './polyfill';
 
 import { NestFactory } from '@nestjs/core';
 import { Transport, MicroserviceOptions } from '@nestjs/microservices';
-import { JoinColumn } from 'typeorm';
 import { join } from 'path';
 import { HealthServiceModule } from './health-service.module';
 
