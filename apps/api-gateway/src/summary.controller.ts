@@ -33,6 +33,11 @@ interface SummaryService {
     queryPrescription(data: { userId: number; question: string }): Observable<{ success: boolean; answer: string }>;
 }
 
+type UploadedPrescriptionFile = {
+    buffer: Buffer;
+    originalname: string;
+};
+
 @ApiTags('summary')
 @ApiBearerAuth()
 @Controller('summary')
@@ -59,7 +64,7 @@ export class SummaryController implements OnModuleInit {
     @UseInterceptors(FileInterceptor('file'))
     async uploadPrescription(
         @Body() body: UploadPrescriptionDto,
-        @UploadedFile() file: Express.Multer.File,
+        @UploadedFile() file: UploadedPrescriptionFile,
     ) {
         return lastValueFrom(
             this.summaryService.uploadPrescription({
