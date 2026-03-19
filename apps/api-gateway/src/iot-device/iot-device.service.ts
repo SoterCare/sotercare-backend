@@ -155,6 +155,35 @@ export class IotDeviceService {
     };
   }
 
+  async unclaimDevice(userId: number, deviceId: string) {
+    const device = await this.iotDeviceRepository.findOne({
+      where: { deviceId },
+    });
+
+    if (!device) {
+      throw new NotFoundException('Device is not registered');
+    }
+
+    if (!device.isPaired || !device.ownerId) {
+      throw new BadRequestException('Device is already unclaimed');
+    }
+
+    if (device.ownerId !== userId) {
+      throw new BadRequestException('Device is claimed by another user');
+    }
+
+    device.ownerId = null;
+    device.isPaired = false;
+    await this.iotDeviceRepository.save(device);
+
+    return {
+      device_id: device.deviceId,
+      owner_id: null,
+      is_paired: false,
+      unclaimed_at: new Date().toISOString(),
+    };
+  }
+
   async authenticateAndResolveOwner(deviceId: string, rawDeviceKey: string) {
     const device = await this.iotDeviceRepository.findOne({
       where: { deviceId },

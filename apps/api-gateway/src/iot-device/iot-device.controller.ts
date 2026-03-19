@@ -29,12 +29,35 @@ export class IotDeviceController {
   ) {
     return {
       success: true,
-      data: await this.iotDeviceService.claimDevice(user.userId, body.device_id),
+      data: await this.iotDeviceService.claimDevice(
+        user.userId,
+        body.device_id,
+      ),
+    };
+  }
+
+  @Post('unclaim')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Unclaim IoT device from current user' })
+  @ApiBody({ type: ClaimDeviceDto })
+  async unclaimDevice(
+    @CurrentUser() user: { userId: number },
+    @Body() body: ClaimDeviceDto,
+  ) {
+    return {
+      success: true,
+      data: await this.iotDeviceService.unclaimDevice(
+        user.userId,
+        body.device_id,
+      ),
     };
   }
 
   @Post('register')
-  @ApiOperation({ summary: 'Register IoT device with device key (bootstrap/admin)' })
+  @ApiOperation({
+    summary: 'Register IoT device with device key (bootstrap/admin)',
+  })
   @ApiBody({ type: RegisterDeviceDto })
   async registerDevice(
     @Body() body: RegisterDeviceDto,
