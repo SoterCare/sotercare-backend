@@ -25,6 +25,8 @@ import {
 import { Observable, lastValueFrom } from 'rxjs';
 import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { IotDeviceService } from './iot-device/iot-device.service';
+import { RealtimeGateway } from './realtime/realtime.gateway';
 
 type AuthenticatedRequest = {
   user: {
@@ -137,11 +139,8 @@ class RaspberryLogDto {
 }
 
 class RaspberrySyncDto {
-  @ApiProperty({ required: false })
-  userId?: number;
-
-  @ApiProperty({ required: false })
-  user_id?: number;
+  @ApiProperty()
+  device_id: string;
 
   @ApiProperty({ type: [RaspberryLogDto] })
   logs: RaspberryLogDto[];
@@ -158,6 +157,10 @@ interface HealthService {
 @UseInterceptors(IdempotencyInterceptor)
 export class HealthController implements OnModuleInit {
   private healthService: HealthService;
+  private readonly maxClockSkewMs = Number(
+    process.env.IOT_MAX_CLOCK_SKEW_MS || 15 * 60 * 1000,
+  );
+
 
   private toUnixMs(value: number | string | undefined): number {
     if (value === undefined || value === null) {
@@ -177,7 +180,11 @@ export class HealthController implements OnModuleInit {
     return Number.isNaN(parsed) ? Date.now() : parsed;
   }
 
-  constructor(@Inject('HEALTH_SERVICE') private client: ClientGrpc) {}
+  constructor(
+    @Inject('HEALTH_SERVICE') private client: ClientGrpc,
+    private readonly iotDeviceService: IotDeviceService,
+    private readonly realtimeGateway: RealtimeGateway,
+  ) {}
 
   onModuleInit() {
     this.healthService = this.client.getService<HealthService>('HealthService');
@@ -222,20 +229,30 @@ export class HealthController implements OnModuleInit {
       throw new ForbiddenException('Invalid Raspberry API key');
     }
 
-    const userId = Number(body.userId ?? body.user_id);
-
-    if (!Number.isFinite(userId) || !Array.isArray(body.logs)) {
-      throw new BadRequestException(
-        'userId (or user_id) and logs are required',
-      );
+    if (!body?.device_id || !Array.isArray(body.logs)) {
+      throw new BadRequestException('device_id and logs are required');
     }
 
-    const grpcLogs = body.logs.map((log, index) => ({
+    const headerKey = String(raspberryKey || '');
+    const { ownerId, deviceId } =
+      await this.iotDeviceService.authenticateAndResolveOwner(
+        body.device_id,
+        headerKey,
+      );
+
+    const now = Date.now();
+    const grpcLogs = body.logs.map((log, index) => {
+      const ts = this.toUnixMs(log.timestamp ?? log.ts);
+      if (Math.abs(now - ts) > this.maxClockSkewMs) {
+        throw new BadRequestException('Log timestamp rejected (replay protection)');
+      }
+
+      return {
       id: Number(log.id ?? index + 1),
       heart_rate: Number(log.heartRate ?? log.heart_rate ?? 0),
       spo2: Number(log.spo2 ?? 0),
       temperature: Number(log.temperature ?? log.temp ?? 0),
-      timestamp: this.toUnixMs(log.timestamp ?? log.ts),
+      timestamp: ts,
       acc_x: log.accX ?? log.acc_x,
       acc_y: log.accY ?? log.acc_y,
       acc_z: log.accZ ?? log.acc_z,
@@ -245,11 +262,21 @@ export class HealthController implements OnModuleInit {
       sos: Boolean(log.sos ?? false),
       fall_alert: Boolean(log.fallAlert ?? log.fall_alert ?? false),
       gait_label: log.gaitLabel ?? log.gait_label ?? '',
-    }));
+      };
+    });
 
-    return lastValueFrom(
-      this.healthService.syncLogs({ user_id: userId, logs: grpcLogs }),
+    const result = await lastValueFrom(
+      this.healthService.syncLogs({ user_id: ownerId, logs: grpcLogs }),
     );
+
+    this.realtimeGateway.emitToUser(ownerId, 'device.logs.ingested', {
+      device_id: deviceId,
+      count: grpcLogs.length,
+      logs: grpcLogs,
+      ingested_at: new Date().toISOString(),
+    });
+
+    return result;
   }
 
   @Get('dates')

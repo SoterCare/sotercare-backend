@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { PassportModule } from '@nestjs/passport';
+import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { join } from 'path';
@@ -18,6 +19,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { DevicesModule } from './devices/devices.module';
 import { SyncModule } from './sync/sync.module';
 import { TimelineModule } from './timeline/timeline.module';
+import { IotDeviceModule } from './iot-device/iot-device.module';
+import { RealtimeGateway } from './realtime/realtime.gateway';
 
 @Module({
   imports: [
@@ -40,7 +43,11 @@ import { TimelineModule } from './timeline/timeline.module';
       inject: [ConfigService],
     }),
     PassportModule,
+    JwtModule.register({
+      secret: process.env.JWT_SECRET || 'REMOVED-OLD-PUBLIC-FALLBACK',
+    }),
     RedisModule,
+    IotDeviceModule,
     SyncModule,
     DevicesModule,
     DashboardModule,
@@ -102,6 +109,6 @@ import { TimelineModule } from './timeline/timeline.module';
     HealthController,
     ReportsController,
   ],
-  providers: [ApiGatewayService, JwtStrategy],
+  providers: [ApiGatewayService, JwtStrategy, RealtimeGateway],
 })
 export class ApiGatewayModule {}
