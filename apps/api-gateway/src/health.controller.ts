@@ -27,6 +27,7 @@ import { IdempotencyInterceptor } from './common/interceptors/idempotency.interc
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { IotDeviceService } from './iot-device/iot-device.service';
 import { RealtimeGateway } from './realtime/realtime.gateway';
+import { VitalSyncService } from './realtime/vital-sync.service';
 
 type AuthenticatedRequest = {
   user: {
@@ -183,6 +184,7 @@ export class HealthController implements OnModuleInit {
     @Inject('HEALTH_SERVICE') private client: ClientGrpc,
     private readonly iotDeviceService: IotDeviceService,
     private readonly realtimeGateway: RealtimeGateway,
+    private readonly vitalSyncService: VitalSyncService,
   ) {}
 
   onModuleInit() {
@@ -277,6 +279,9 @@ export class HealthController implements OnModuleInit {
     const result = await lastValueFrom(
       this.healthService.syncLogs({ user_id: ownerId, logs: grpcLogs }),
     );
+
+    // Upsert latest vital snapshot to the dashboard vitals table
+    await this.vitalSyncService.upsertLatestVital(deviceId, body.logs);
 
     this.realtimeGateway.emitToUser(ownerId, 'device.logs.ingested', {
       device_id: deviceId,

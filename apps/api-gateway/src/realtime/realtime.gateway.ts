@@ -15,6 +15,7 @@ import type { ClientGrpc } from '@nestjs/microservices';
 import { lastValueFrom, type Observable } from 'rxjs';
 import { Server, Socket } from 'socket.io';
 import { IotDeviceService } from '../iot-device/iot-device.service';
+import { VitalSyncService } from './vital-sync.service';
 
 interface HealthService {
   syncLogs(data: unknown): Observable<unknown>;
@@ -44,6 +45,7 @@ export class RealtimeGateway
     @Inject('HEALTH_SERVICE') private readonly healthClient: ClientGrpc,
     private readonly jwtService: JwtService,
     private readonly iotDeviceService: IotDeviceService,
+    private readonly vitalSyncService: VitalSyncService,
   ) {}
 
   afterInit() {
@@ -202,6 +204,9 @@ export class RealtimeGateway
     const result = await lastValueFrom(
       this.healthService.syncLogs({ user_id: ownerId, logs: grpcLogs }),
     );
+
+    // Upsert latest vital snapshot to the dashboard vitals table
+    await this.vitalSyncService.upsertLatestVital(deviceId, logs as never[]);
 
     this.emitToUser(ownerId, 'device.logs.ingested', {
       device_id: deviceId,

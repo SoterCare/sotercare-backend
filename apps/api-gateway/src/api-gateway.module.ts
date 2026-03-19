@@ -21,6 +21,8 @@ import { SyncModule } from './sync/sync.module';
 import { TimelineModule } from './timeline/timeline.module';
 import { IotDeviceModule } from './iot-device/iot-device.module';
 import { RealtimeGateway } from './realtime/realtime.gateway';
+import { VitalSyncService } from './realtime/vital-sync.service';
+import { Vital } from './database/entities';
 
 @Module({
   imports: [
@@ -53,6 +55,7 @@ import { RealtimeGateway } from './realtime/realtime.gateway';
     DashboardModule,
     AlertsModule,
     TimelineModule,
+    TypeOrmModule.forFeature([Vital]),
     ClientsModule.register([
       {
         name: 'AUTH_SERVICE',
@@ -109,6 +112,6 @@ import { RealtimeGateway } from './realtime/realtime.gateway';
     HealthController,
     ReportsController,
   ],
-  providers: [ApiGatewayService, JwtStrategy, RealtimeGateway],
+  providers: [ApiGatewayService, JwtStrategy, RealtimeGateway, VitalSyncService],
 })
 export class ApiGatewayModule {}
