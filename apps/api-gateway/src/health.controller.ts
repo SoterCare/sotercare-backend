@@ -161,7 +161,6 @@ export class HealthController implements OnModuleInit {
     process.env.IOT_MAX_CLOCK_SKEW_MS || 15 * 60 * 1000,
   );
 
-
   private toUnixMs(value: number | string | undefined): number {
     if (value === undefined || value === null) {
       return Date.now();
@@ -223,6 +222,7 @@ export class HealthController implements OnModuleInit {
   async syncRaspberryLogs(
     @Body() body: RaspberrySyncDto,
     @Headers('x-raspberry-key') raspberryKey?: string,
+    @Headers('x-device-key') deviceKeyHeader?: string,
   ) {
     const expectedKey = process.env.RASPBERRY_API_KEY;
     if (expectedKey && raspberryKey !== expectedKey) {
@@ -233,7 +233,14 @@ export class HealthController implements OnModuleInit {
       throw new BadRequestException('device_id and logs are required');
     }
 
-    const headerKey = String(raspberryKey || '');
+    // Use a dedicated per-device key when gateway-level key is enabled.
+    const headerKey = String(
+      deviceKeyHeader || (expectedKey ? '' : raspberryKey || ''),
+    );
+    if (!headerKey) {
+      throw new ForbiddenException('Device key is required');
+    }
+
     const { ownerId, deviceId } =
       await this.iotDeviceService.authenticateAndResolveOwner(
         body.device_id,
@@ -244,24 +251,26 @@ export class HealthController implements OnModuleInit {
     const grpcLogs = body.logs.map((log, index) => {
       const ts = this.toUnixMs(log.timestamp ?? log.ts);
       if (Math.abs(now - ts) > this.maxClockSkewMs) {
-        throw new BadRequestException('Log timestamp rejected (replay protection)');
+        throw new BadRequestException(
+          'Log timestamp rejected (replay protection)',
+        );
       }
 
       return {
-      id: Number(log.id ?? index + 1),
-      heart_rate: Number(log.heartRate ?? log.heart_rate ?? 0),
-      spo2: Number(log.spo2 ?? 0),
-      temperature: Number(log.temperature ?? log.temp ?? 0),
-      timestamp: ts,
-      acc_x: log.accX ?? log.acc_x,
-      acc_y: log.accY ?? log.acc_y,
-      acc_z: log.accZ ?? log.acc_z,
-      g_total: log.gTotal ?? log.g_total,
-      ambient_temp: log.ambientTemp ?? log.ambient_temp,
-      moisture: log.moisture,
-      sos: Boolean(log.sos ?? false),
-      fall_alert: Boolean(log.fallAlert ?? log.fall_alert ?? false),
-      gait_label: log.gaitLabel ?? log.gait_label ?? '',
+        id: Number(log.id ?? index + 1),
+        heart_rate: Number(log.heartRate ?? log.heart_rate ?? 0),
+        spo2: Number(log.spo2 ?? 0),
+        temperature: Number(log.temperature ?? log.temp ?? 0),
+        timestamp: ts,
+        acc_x: log.accX ?? log.acc_x,
+        acc_y: log.accY ?? log.acc_y,
+        acc_z: log.accZ ?? log.acc_z,
+        g_total: log.gTotal ?? log.g_total,
+        ambient_temp: log.ambientTemp ?? log.ambient_temp,
+        moisture: log.moisture,
+        sos: Boolean(log.sos ?? false),
+        fall_alert: Boolean(log.fallAlert ?? log.fall_alert ?? false),
+        gait_label: log.gaitLabel ?? log.gait_label ?? '',
       };
     });
 
