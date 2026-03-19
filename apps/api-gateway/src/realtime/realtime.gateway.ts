@@ -21,6 +21,16 @@ interface HealthService {
   syncLogs(data: unknown): Observable<unknown>;
 }
 
+type JwtPayload = {
+  userId?: number | string;
+};
+
+type RealtimeSocketData = {
+  userId?: number;
+  deviceId?: string;
+  ownerId?: number;
+};
+
 @WebSocketGateway({
   namespace: '/realtime',
   cors: {
@@ -59,12 +69,13 @@ export class RealtimeGateway
     }
 
     if (typeof value === 'number' && Number.isFinite(value)) {
-      return value;
+      // Accept both unix seconds and unix milliseconds.
+      return value < 1_000_000_000_000 ? value * 1000 : value;
     }
 
     const numeric = Number(value);
     if (!Number.isNaN(numeric) && Number.isFinite(numeric)) {
-      return numeric;
+      return numeric < 1_000_000_000_000 ? numeric * 1000 : numeric;
     }
 
     const parsed = Date.parse(String(value));
@@ -74,14 +85,17 @@ export class RealtimeGateway
   async handleConnection(client: Socket) {
     const token =
       String(client.handshake.auth?.token || '') ||
-      String(client.handshake.headers.authorization || '').replace('Bearer ', '');
+      String(client.handshake.headers.authorization || '').replace(
+        'Bearer ',
+        '',
+      );
 
     if (!token) {
       return;
     }
 
     try {
-      const payload = await this.jwtService.verifyAsync(token, {
+      const payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
         secret: process.env.JWT_SECRET || 'REMOVED-OLD-PUBLIC-FALLBACK',
       });
       const userId = Number(payload.userId);
@@ -92,14 +106,16 @@ export class RealtimeGateway
       const existing = this.userSockets.get(userId) || new Set<string>();
       existing.add(client.id);
       this.userSockets.set(userId, existing);
-      client.data.userId = userId;
+      const data = client.data as RealtimeSocketData;
+      data.userId = userId;
     } catch {
       // keep connection open for unauthenticated client types (device_auth event)
     }
   }
 
   handleDisconnect(client: Socket) {
-    const userId = Number(client.data.userId);
+    const data = client.data as RealtimeSocketData;
+    const userId = Number(data.userId);
     if (Number.isFinite(userId)) {
       const set = this.userSockets.get(userId);
       if (set) {
@@ -121,7 +137,11 @@ export class RealtimeGateway
   async handleDeviceAuth(
     @ConnectedSocket() client: Socket,
     @MessageBody()
-    body: { device_id: string; device_key: string; timestamp?: string | number },
+    body: {
+      device_id: string;
+      device_key: string;
+      timestamp?: string | number;
+    },
   ) {
     const result = await this.iotDeviceService.authenticateAndResolveOwner(
       body.device_id,
@@ -129,8 +149,9 @@ export class RealtimeGateway
     );
 
     this.deviceSockets.set(result.deviceId, client.id);
-    client.data.deviceId = result.deviceId;
-    client.data.ownerId = result.ownerId;
+    const data = client.data as RealtimeSocketData;
+    data.deviceId = result.deviceId;
+    data.ownerId = result.ownerId;
 
     return {
       success: true,
@@ -147,15 +168,21 @@ export class RealtimeGateway
       device_id?: string;
       device_key?: string;
       logs?: Array<Record<string, unknown>>;
+      payload?: Record<string, unknown>;
     },
   ) {
-    const logs = Array.isArray(body?.logs) ? body.logs : [];
+    const logs = Array.isArray(body?.logs)
+      ? body.logs
+      : body?.payload && typeof body.payload === 'object'
+        ? [body.payload]
+        : [];
     if (logs.length === 0) {
       throw new WsException('logs are required');
     }
 
-    let deviceId = String(client.data.deviceId || '');
-    let ownerId = Number(client.data.ownerId);
+    const data = client.data as RealtimeSocketData;
+    let deviceId = String(data.deviceId || '');
+    let ownerId = Number(data.ownerId);
 
     if (!deviceId || !Number.isFinite(ownerId)) {
       if (!body.device_id || !body.device_key) {
@@ -168,8 +195,8 @@ export class RealtimeGateway
       );
       deviceId = resolved.deviceId;
       ownerId = resolved.ownerId;
-      client.data.deviceId = deviceId;
-      client.data.ownerId = ownerId;
+      data.deviceId = deviceId;
+      data.ownerId = ownerId;
       this.deviceSockets.set(deviceId, client.id);
     }
 
@@ -177,11 +204,14 @@ export class RealtimeGateway
     const grpcLogs = logs.map((log, index) => {
       const ts = this.toUnixMs(
         (log.timestamp as string | number | undefined) ??
-          (log.ts as string | number | undefined),
+          (log.ts as string | number | undefined) ??
+          (log.unix_timestamp as string | number | undefined),
       );
       if (Math.abs(now - ts) > this.maxClockSkewMs) {
         throw new WsException('Log timestamp rejected (replay protection)');
       }
+
+      const gaitRaw = log.gaitLabel ?? log.gait_label;
 
       return {
         id: Number(log.id ?? index + 1),
@@ -195,9 +225,9 @@ export class RealtimeGateway
         g_total: log.gTotal ?? log.g_total,
         ambient_temp: log.ambientTemp ?? log.ambient_temp,
         moisture: log.moisture,
-        sos: Boolean(log.sos ?? false),
+        sos: Boolean(log.sos ?? log.sos_trigger ?? false),
         fall_alert: Boolean(log.fallAlert ?? log.fall_alert ?? false),
-        gait_label: String(log.gaitLabel ?? log.gait_label ?? ''),
+        gait_label: typeof gaitRaw === 'string' ? gaitRaw : '',
       };
     });
 
