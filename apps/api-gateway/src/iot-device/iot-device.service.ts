@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 import { Repository } from 'typeorm';
 import { IotDevice } from './iot-device.entity';
+import { Device, DeviceType } from '../database/entities';
 
 @Injectable()
 export class IotDeviceService {
@@ -19,6 +20,8 @@ export class IotDeviceService {
     private readonly configService: ConfigService,
     @InjectRepository(IotDevice)
     private readonly iotDeviceRepository: Repository<IotDevice>,
+    @InjectRepository(Device)
+    private readonly deviceRepository: Repository<Device>,
   ) {
     this.claimOnlineTtlSeconds = Number(
       this.configService.get('IOT_ONLINE_TTL_SECONDS', 300),
@@ -26,6 +29,34 @@ export class IotDeviceService {
     this.claimRequireOnline =
       String(this.configService.get('IOT_CLAIM_REQUIRE_ONLINE', 'true')) ===
       'true';
+  }
+
+  private async ensureDashboardDeviceRow(ownerId: number, deviceId: string) {
+    const now = new Date();
+    const existing = await this.deviceRepository.findOne({
+      where: { id: deviceId },
+    });
+
+    if (existing) {
+      existing.userId = ownerId;
+      existing.lastSeenAt = now;
+      existing.lastSyncSlot = existing.lastSyncSlot || 'iot_live';
+      existing.syncSource = existing.syncSource || 'iot_claim';
+      await this.deviceRepository.save(existing);
+      return;
+    }
+
+    await this.deviceRepository.save(
+      this.deviceRepository.create({
+        id: deviceId,
+        userId: ownerId,
+        name: `IoT Device ${deviceId}`,
+        type: DeviceType.HUB,
+        lastSeenAt: now,
+        lastSyncSlot: 'iot_live',
+        syncSource: 'iot_claim',
+      }),
+    );
   }
 
   private hashDeviceKey(rawDeviceKey: string): string {
@@ -92,22 +123,29 @@ export class IotDeviceService {
     }
 
     if (device.isPaired && device.ownerId && device.ownerId !== userId) {
-      throw new BadRequestException('Device is already claimed by another user');
+      throw new BadRequestException(
+        'Device is already claimed by another user',
+      );
     }
 
     if (this.claimRequireOnline) {
       if (!device.lastSeen) {
-        throw new BadRequestException('Device is offline and cannot be claimed');
+        throw new BadRequestException(
+          'Device is offline and cannot be claimed',
+        );
       }
       const elapsed = (Date.now() - device.lastSeen.getTime()) / 1000;
       if (elapsed > this.claimOnlineTtlSeconds) {
-        throw new BadRequestException('Device is offline and cannot be claimed');
+        throw new BadRequestException(
+          'Device is offline and cannot be claimed',
+        );
       }
     }
 
     device.ownerId = userId;
     device.isPaired = true;
     await this.iotDeviceRepository.save(device);
+    await this.ensureDashboardDeviceRow(userId, device.deviceId);
 
     return {
       device_id: device.deviceId,
@@ -136,6 +174,8 @@ export class IotDeviceService {
     if (!device.isPaired || !device.ownerId) {
       throw new BadRequestException('Device not claimed');
     }
+
+    await this.ensureDashboardDeviceRow(device.ownerId, device.deviceId);
 
     return {
       ownerId: device.ownerId,
