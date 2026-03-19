@@ -9,7 +9,7 @@ import {
   WebSocketServer,
   WsException,
 } from '@nestjs/websockets';
-import { Inject } from '@nestjs/common';
+import { HttpException, Inject } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { ClientGrpc } from '@nestjs/microservices';
 import { lastValueFrom, type Observable } from 'rxjs';
@@ -61,6 +61,37 @@ export class RealtimeGateway
   afterInit() {
     this.healthService =
       this.healthClient.getService<HealthService>('HealthService');
+  }
+
+  private toWsException(error: unknown): WsException {
+    if (error instanceof WsException) {
+      return error;
+    }
+
+    if (error instanceof HttpException) {
+      const response = error.getResponse();
+      if (
+        typeof response === 'object' &&
+        response !== null &&
+        'message' in response
+      ) {
+        const message = (response as { message?: unknown }).message;
+        if (Array.isArray(message)) {
+          return new WsException(message.join(', '));
+        }
+        if (typeof message === 'string' && message.length > 0) {
+          return new WsException(message);
+        }
+      }
+
+      return new WsException(error.message || 'Request failed');
+    }
+
+    if (error instanceof Error) {
+      return new WsException(error.message || 'Internal server error');
+    }
+
+    return new WsException('Internal server error');
   }
 
   private toUnixMs(value: number | string | undefined): number {
@@ -143,10 +174,15 @@ export class RealtimeGateway
       timestamp?: string | number;
     },
   ) {
-    const result = await this.iotDeviceService.authenticateAndResolveOwner(
-      body.device_id,
-      body.device_key,
-    );
+    let result: { ownerId: number; deviceId: string };
+    try {
+      result = await this.iotDeviceService.authenticateAndResolveOwner(
+        body.device_id,
+        body.device_key,
+      );
+    } catch (error) {
+      throw this.toWsException(error);
+    }
 
     this.deviceSockets.set(result.deviceId, client.id);
     const data = client.data as RealtimeSocketData;
@@ -189,10 +225,15 @@ export class RealtimeGateway
         throw new WsException('device_auth required before device_data');
       }
 
-      const resolved = await this.iotDeviceService.authenticateAndResolveOwner(
-        body.device_id,
-        body.device_key,
-      );
+      let resolved: { ownerId: number; deviceId: string };
+      try {
+        resolved = await this.iotDeviceService.authenticateAndResolveOwner(
+          body.device_id,
+          body.device_key,
+        );
+      } catch (error) {
+        throw this.toWsException(error);
+      }
       deviceId = resolved.deviceId;
       ownerId = resolved.ownerId;
       data.deviceId = deviceId;
