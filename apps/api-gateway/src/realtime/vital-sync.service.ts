@@ -14,6 +14,7 @@ export interface RawLog {
   timestamp?: number | string;
   ts?: number | string;
   unix_timestamp?: number | string;
+  unix_times?: number | string;
 }
 
 @Injectable()
@@ -34,20 +35,30 @@ export class VitalSyncService {
 
     // Pick the newest log by timestamp
     const latest = logs.reduce<RawLog>((newest, log) => {
-      const tsA = this.toMs(log.timestamp ?? log.ts ?? log.unix_timestamp);
+      const tsA = this.toMs(
+        log.timestamp ?? log.ts ?? log.unix_timestamp ?? log.unix_times,
+      );
       const tsB = this.toMs(
-        newest.timestamp ?? newest.ts ?? newest.unix_timestamp,
+        newest.timestamp ??
+          newest.ts ??
+          newest.unix_timestamp ??
+          newest.unix_times,
       );
       return tsA >= tsB ? log : newest;
     }, logs[0]);
 
     const timestamp = new Date(
-      this.toMs(latest.timestamp ?? latest.ts ?? latest.unix_timestamp),
+      this.toMs(
+        latest.timestamp ??
+          latest.ts ??
+          latest.unix_timestamp ??
+          latest.unix_times,
+      ),
     );
-    const temperature = (latest.temperature ?? latest.temp) ?? null;
-    const roomTemperature = (latest.ambient_temp ?? latest.ambientTemp) ?? null;
+    const temperature = latest.temperature ?? latest.temp ?? null;
+    const roomTemperature = latest.ambient_temp ?? latest.ambientTemp ?? null;
     const moisture = latest.moisture ?? null;
-    const gaitAnalysis = (latest.gaitLabel ?? latest.gait_label) ?? null;
+    const gaitAnalysis = latest.gaitLabel ?? latest.gait_label ?? null;
 
     // Skip if all vital fields are empty
     if (
@@ -71,15 +82,17 @@ export class VitalSyncService {
         this.vitalRepository.create({
           deviceId,
           timestamp,
-          temperature: temperature as number | null,
-          roomTemperature: roomTemperature as number | null,
-          moisture: moisture as number | null,
+          temperature,
+          roomTemperature,
+          moisture,
           gaitAnalysis,
           syncSlot: 'iot_live',
         }),
       );
 
-      this.logger.log(`Vital upserted for device ${deviceId} at ${timestamp.toISOString()}`);
+      this.logger.log(
+        `Vital upserted for device ${deviceId} at ${timestamp.toISOString()}`,
+      );
     } catch (err) {
       // Non-fatal — health data still saved via gRPC
       this.logger.warn(`Failed to upsert vital for device ${deviceId}: ${err}`);
