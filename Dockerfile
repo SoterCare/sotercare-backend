@@ -28,6 +28,13 @@ ENV NODE_ENV=production
 # Keep Node heap conservative for low-memory hosts.
 ENV NODE_OPTIONS=--max-old-space-size=256
 ENV PATH=/opt/venv/bin:$PATH
+ENV DB_HOST=postgres
+ENV DB_PORT=5432
+ENV DB_USER=postgres
+ENV DB_PASS=postgres
+ENV DB_NAME=auth_db
+ENV REDIS_HOST=redis
+ENV REDIS_PORT=6379
 
 COPY --from=builder /usr/src/app/node_modules ./node_modules
 COPY package*.json ./
