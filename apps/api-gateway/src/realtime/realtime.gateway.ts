@@ -31,6 +31,23 @@ type RealtimeSocketData = {
   ownerId?: number;
 };
 
+type NormalizedGrpcLog = {
+  id: number;
+  heart_rate: number;
+  spo2: number;
+  temperature: number;
+  timestamp: number;
+  acc_x?: number;
+  acc_y?: number;
+  acc_z?: number;
+  g_total?: number;
+  ambient_temp?: number;
+  moisture?: number;
+  sos: boolean;
+  fall_alert: boolean;
+  gait_label: string;
+};
+
 @WebSocketGateway({
   namespace: '/realtime',
   cors: {
@@ -111,6 +128,14 @@ export class RealtimeGateway
 
     const parsed = Date.parse(String(value));
     return Number.isNaN(parsed) ? Date.now() : parsed;
+  }
+
+  private toOptionalNumber(value: unknown): number | undefined {
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+    const n = Number(value);
+    return Number.isFinite(n) ? n : undefined;
   }
 
   async handleConnection(client: Socket) {
@@ -207,11 +232,12 @@ export class RealtimeGateway
       payload?: Record<string, unknown>;
     },
   ) {
-    const logs = Array.isArray(body?.logs)
-      ? body.logs
-      : body?.payload && typeof body.payload === 'object'
-        ? [body.payload]
-        : [];
+    const logs =
+      Array.isArray(body?.logs) && body.logs.length > 0
+        ? body.logs
+        : body?.payload && typeof body.payload === 'object'
+          ? [body.payload]
+          : [];
     if (logs.length === 0) {
       throw new WsException('logs are required');
     }
@@ -242,11 +268,12 @@ export class RealtimeGateway
     }
 
     const now = Date.now();
-    const grpcLogs = logs.map((log, index) => {
+    const grpcLogs: NormalizedGrpcLog[] = logs.map((log, index) => {
       const ts = this.toUnixMs(
         (log.timestamp as string | number | undefined) ??
           (log.ts as string | number | undefined) ??
-          (log.unix_timestamp as string | number | undefined),
+          (log.unix_timestamp as string | number | undefined) ??
+          (log.unix_times as string | number | undefined),
       );
       if (Math.abs(now - ts) > this.maxClockSkewMs) {
         throw new WsException('Log timestamp rejected (replay protection)');
@@ -260,12 +287,14 @@ export class RealtimeGateway
         spo2: Number(log.spo2 ?? 0),
         temperature: Number(log.temperature ?? log.temp ?? 0),
         timestamp: ts,
-        acc_x: log.accX ?? log.acc_x,
-        acc_y: log.accY ?? log.acc_y,
-        acc_z: log.accZ ?? log.acc_z,
-        g_total: log.gTotal ?? log.g_total,
-        ambient_temp: log.ambientTemp ?? log.ambient_temp,
-        moisture: log.moisture,
+        acc_x: this.toOptionalNumber(log.accX ?? log.acc_x),
+        acc_y: this.toOptionalNumber(log.accY ?? log.acc_y),
+        acc_z: this.toOptionalNumber(log.accZ ?? log.acc_z),
+        g_total: this.toOptionalNumber(log.gTotal ?? log.g_total),
+        ambient_temp: this.toOptionalNumber(
+          log.ambientTemp ?? log.ambient_temp,
+        ),
+        moisture: this.toOptionalNumber(log.moisture),
         sos: Boolean(log.sos ?? log.sos_trigger ?? false),
         fall_alert: Boolean(log.fallAlert ?? log.fall_alert ?? false),
         gait_label: typeof gaitRaw === 'string' ? gaitRaw : '',
@@ -277,7 +306,7 @@ export class RealtimeGateway
     );
 
     // Upsert latest vital snapshot to the dashboard vitals table
-    await this.vitalSyncService.upsertLatestVital(deviceId, logs as never[]);
+    await this.vitalSyncService.upsertLatestVital(deviceId, grpcLogs);
 
     this.emitToUser(ownerId, 'device.logs.ingested', {
       device_id: deviceId,

@@ -13,6 +13,7 @@ export interface RawLog {
   gait_label?: string;
   timestamp?: number | string;
   ts?: number | string;
+  unix_timestamp?: number | string;
 }
 
 @Injectable()
@@ -33,12 +34,16 @@ export class VitalSyncService {
 
     // Pick the newest log by timestamp
     const latest = logs.reduce<RawLog>((newest, log) => {
-      const tsA = this.toMs(log.timestamp ?? log.ts);
-      const tsB = this.toMs(newest.timestamp ?? newest.ts);
+      const tsA = this.toMs(log.timestamp ?? log.ts ?? log.unix_timestamp);
+      const tsB = this.toMs(
+        newest.timestamp ?? newest.ts ?? newest.unix_timestamp,
+      );
       return tsA >= tsB ? log : newest;
     }, logs[0]);
 
-    const timestamp = new Date(this.toMs(latest.timestamp ?? latest.ts));
+    const timestamp = new Date(
+      this.toMs(latest.timestamp ?? latest.ts ?? latest.unix_timestamp),
+    );
     const temperature = (latest.temperature ?? latest.temp) ?? null;
     const roomTemperature = (latest.ambient_temp ?? latest.ambientTemp) ?? null;
     const moisture = latest.moisture ?? null;
@@ -83,9 +88,13 @@ export class VitalSyncService {
 
   private toMs(value: number | string | undefined): number {
     if (value === undefined || value === null) return Date.now();
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value < 1_000_000_000_000 ? value * 1000 : value;
+    }
     const n = Number(value);
-    if (!Number.isNaN(n) && Number.isFinite(n)) return n;
+    if (!Number.isNaN(n) && Number.isFinite(n)) {
+      return n < 1_000_000_000_000 ? n * 1000 : n;
+    }
     const p = Date.parse(String(value));
     return Number.isNaN(p) ? Date.now() : p;
   }
