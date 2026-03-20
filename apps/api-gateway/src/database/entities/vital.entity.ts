@@ -37,6 +37,9 @@ export class Vital {
   @Column({ type: 'text', nullable: true })
   gaitAnalysis: string | null;
 
+  @Column({ type: 'text', nullable: true })
+  thighnodeStatus: string | null;
+
   @Column()
   syncSlot: string;
 

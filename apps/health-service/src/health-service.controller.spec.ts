@@ -42,7 +42,7 @@ describe('HealthServiceController', () => {
 
       const payload = {
         user_id: 7,
-        logs: [{ timestamp: Date.now(), heart_rate: 72 }],
+        logs: [{ timestamp: Date.now(), temperature: 36.5 }],
       };
 
       const result = await healthServiceController.syncLogs(payload);

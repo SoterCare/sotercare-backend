@@ -8,11 +8,11 @@ import { DevicesService } from './devices/devices.service';
 
 class MetricsDto {
     @ApiProperty()
-    heartRate: boolean;
-    @ApiProperty()
-    spo2: boolean;
-    @ApiProperty()
     temperature: boolean;
+    @ApiProperty()
+    ambientTemp: boolean;
+    @ApiProperty()
+    moisture: boolean;
 }
 
 class ExportReportDto {
@@ -90,9 +90,12 @@ export class ReportsController implements OnModuleInit {
             try {
                 // Convert entity objects to plain data for serialization
                 const plainLogs = logs.map(log => ({
-                    heartRate: log.heartRate,
-                    spo2: log.spo2,
                     temperature: log.temperature,
+                    ambientTemp: log.ambient_temp ?? log.ambientTemp,
+                    moisture: log.moisture,
+                    gaitLabel: log.gait_label ?? log.gaitLabel,
+                    sos: log.sos,
+                    fallAlert: log.fall_alert ?? log.fallAlert,
                     timestamp: log.timestamp
                 }));
 

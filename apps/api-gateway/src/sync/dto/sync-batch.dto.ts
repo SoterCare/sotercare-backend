@@ -56,6 +56,9 @@ export class SyncVitalDto {
 
   @ApiPropertyOptional({ example: 'N/A' })
   gaitAnalysis?: string;
+
+  @ApiPropertyOptional({ example: 'ble' })
+  thighnodeStatus?: string;
 }
 
 export class SyncAlertDto {

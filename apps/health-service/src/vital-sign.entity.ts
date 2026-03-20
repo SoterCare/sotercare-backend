@@ -16,25 +16,7 @@ export class VitalSign {
   userId: number; // Reference to Auth Service User ID
 
   @Column('float')
-  heartRate: number;
-
-  @Column('float')
-  spo2: number;
-
-  @Column('float')
   temperature: number;
-
-  @Column('float', { nullable: true })
-  accX: number | null;
-
-  @Column('float', { nullable: true })
-  accY: number | null;
-
-  @Column('float', { nullable: true })
-  accZ: number | null;
-
-  @Column('float', { nullable: true })
-  gTotal: number | null;
 
   @Column('float', { nullable: true })
   ambientTemp: number | null;
@@ -50,6 +32,9 @@ export class VitalSign {
 
   @Column({ type: 'text', nullable: true })
   gaitLabel: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  thighnodeStatus: string | null;
 
   @Column({ type: 'bigint' })
   timestamp: string; // Storing as string to handle BigInt safely

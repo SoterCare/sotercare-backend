@@ -14,7 +14,10 @@ import { JwtService } from '@nestjs/jwt';
 import type { ClientGrpc } from '@nestjs/microservices';
 import { lastValueFrom, type Observable } from 'rxjs';
 import { Server, Socket } from 'socket.io';
+import { AlertType } from '../database/entities';
 import { IotDeviceService } from '../iot-device/iot-device.service';
+import { SyncBatchDto } from '../sync/dto/sync-batch.dto';
+import { SyncService } from '../sync/sync.service';
 import { VitalSyncService } from './vital-sync.service';
 
 interface HealthService {
@@ -33,19 +36,14 @@ type RealtimeSocketData = {
 
 type NormalizedGrpcLog = {
   id: number;
-  heart_rate: number;
-  spo2: number;
   temperature: number;
-  timestamp: number;
-  acc_x?: number;
-  acc_y?: number;
-  acc_z?: number;
-  g_total?: number;
   ambient_temp?: number;
   moisture?: number;
-  sos: boolean;
-  fall_alert: boolean;
   gait_label: string;
+  sos: boolean;
+  thighnode_status: string;
+  fall_alert: boolean;
+  timestamp: number;
 };
 
 @WebSocketGateway({
@@ -73,6 +71,7 @@ export class RealtimeGateway
     private readonly jwtService: JwtService,
     private readonly iotDeviceService: IotDeviceService,
     private readonly vitalSyncService: VitalSyncService,
+    private readonly syncService: SyncService,
   ) {}
 
   afterInit() {
@@ -284,21 +283,16 @@ export class RealtimeGateway
 
       return {
         id: Number(log.id ?? index + 1),
-        heart_rate: Number(log.heartRate ?? log.heart_rate ?? 0),
-        spo2: Number(log.spo2 ?? 0),
         temperature: Number(log.temperature ?? log.temp ?? 0),
-        timestamp: ts,
-        acc_x: this.toOptionalNumber(log.accX ?? log.acc_x),
-        acc_y: this.toOptionalNumber(log.accY ?? log.acc_y),
-        acc_z: this.toOptionalNumber(log.accZ ?? log.acc_z),
-        g_total: this.toOptionalNumber(log.gTotal ?? log.g_total),
         ambient_temp: this.toOptionalNumber(
           log.ambientTemp ?? log.ambient_temp,
         ),
         moisture: this.toOptionalNumber(log.moisture),
-        sos: Boolean(log.sos ?? log.sos_trigger ?? false),
-        fall_alert: Boolean(log.fallAlert ?? log.fall_alert ?? false),
         gait_label: typeof gaitRaw === 'string' ? gaitRaw : '',
+        sos: Boolean(log.sos ?? log.sos_trigger ?? false),
+        thighnode_status: String(log.thighnodeStatus ?? log.thighnode_status ?? ''),
+        fall_alert: Boolean(log.fallAlert ?? log.fall_alert ?? false),
+        timestamp: ts,
       };
     });
 
@@ -312,6 +306,52 @@ export class RealtimeGateway
       : await lastValueFrom(
           this.healthService.syncLogs({ user_id: ownerId, logs: grpcLogs }),
         );
+
+    const recentAlerts: SyncBatchDto['recentAlerts'] = [];
+    grpcLogs.forEach(log => {
+      if (log.sos) {
+        recentAlerts.push({
+          id: `sos_${log.timestamp}`,
+          deviceId: deviceId,
+          type: AlertType.MOVEMENT,
+          title: 'SOS Button Activated',
+          timestamp: new Date(log.timestamp).toISOString()
+        });
+      }
+      if (log.fall_alert) {
+        recentAlerts.push({
+          id: `fall_${log.timestamp}`,
+          deviceId: deviceId,
+          type: AlertType.FALL,
+          title: 'Fall Detected',
+          timestamp: new Date(log.timestamp).toISOString()
+        });
+      }
+    });
+
+    const syncBatch: SyncBatchDto = {
+      source: 'websocket_realtime',
+      syncedAt: new Date().toISOString(),
+      slot: `live_${Date.now()}`,
+      gatewayHost: 'realtime_socket',
+      devices: [],
+      deviceStatuses: [],
+      latestVitals: grpcLogs.map(log => ({
+        deviceId,
+        timestamp: new Date(log.timestamp).toISOString(),
+        temperature: log.temperature,
+        roomTemperature: log.ambient_temp,
+        moisture: log.moisture,
+        gaitAnalysis: log.gait_label,
+        thighnodeStatus: log.thighnode_status
+      })),
+      recentAlerts,
+      recordingSessions: []
+    };
+
+    if (!realtimeOnly) {
+      await this.syncService.processRaspberryPiSync(ownerId, syncBatch);
+    }
 
     // Upsert latest vital snapshot to the dashboard vitals table
     await this.vitalSyncService.upsertLatestVital(deviceId, grpcLogs);

@@ -18,19 +18,13 @@ export class HealthServiceService {
     const entities = logs.map(log => {
       const entity = new VitalSign();
       entity.userId = userId;
-      // Handle potential snake_case from gRPC (keepCase: true)
-      entity.heartRate = log.heartRate ?? log.heart_rate ?? 0;
-      entity.spo2 = log.spo2 ?? 0;
       entity.temperature = log.temperature ?? log.temp ?? 0;
-      entity.accX = log.accX ?? log.acc_x ?? null;
-      entity.accY = log.accY ?? log.acc_y ?? null;
-      entity.accZ = log.accZ ?? log.acc_z ?? null;
-      entity.gTotal = log.gTotal ?? log.g_total ?? null;
       entity.ambientTemp = log.ambientTemp ?? log.ambient_temp ?? null;
       entity.moisture = log.moisture ?? null;
       entity.sos = log.sos ?? null;
       entity.fallAlert = log.fallAlert ?? log.fall_alert ?? null;
       entity.gaitLabel = log.gaitLabel ?? log.gait_label ?? null;
+      entity.thighnodeStatus = log.thighnodeStatus ?? log.thighnode_status ?? null;
       entity.timestamp = (log.timestamp ?? log.ts ?? Date.now()).toString();
 
       return entity;

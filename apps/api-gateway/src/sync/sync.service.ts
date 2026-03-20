@@ -114,6 +114,7 @@ export class SyncService {
               roomTemperature: vital.roomTemperature ?? null,
               moisture: vital.moisture ?? null,
               gaitAnalysis: vital.gaitAnalysis ?? null,
+              thighnodeStatus: vital.thighnodeStatus ?? null,
               syncSlot: payload.slot,
             }),
           );

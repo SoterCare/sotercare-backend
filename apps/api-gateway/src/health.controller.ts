@@ -19,6 +19,7 @@ import {
   ApiOperation,
   ApiBody,
   ApiProperty,
+  ApiPropertyOptional,
   ApiBearerAuth,
   ApiQuery,
 } from '@nestjs/swagger';
@@ -36,17 +37,29 @@ type AuthenticatedRequest = {
 };
 
 class VitalDataDto {
-  @ApiProperty()
-  heartRate: number;
+  @ApiPropertyOptional()
+  temperature?: number;
+
+  @ApiPropertyOptional()
+  ambientTemp?: number;
+
+  @ApiPropertyOptional()
+  moisture?: number;
+
+  @ApiPropertyOptional()
+  gaitLabel?: string;
+
+  @ApiPropertyOptional()
+  sos?: boolean;
+
+  @ApiPropertyOptional()
+  fallAlert?: boolean;
+
+  @ApiPropertyOptional()
+  thighnodeStatus?: string;
 
   @ApiProperty()
-  spo2: number;
-
-  @ApiProperty()
-  temperature: number;
-
-  @ApiProperty()
-  timestamp: number;
+  timestamp: number | string;
 }
 
 class LogEntryDto {
@@ -70,15 +83,6 @@ class RaspberryLogDto {
   id?: number;
 
   @ApiProperty({ required: false })
-  heartRate?: number;
-
-  @ApiProperty({ required: false })
-  heart_rate?: number;
-
-  @ApiProperty({ required: false })
-  spo2?: number;
-
-  @ApiProperty({ required: false })
   temperature?: number;
 
   @ApiProperty({ required: false })
@@ -91,28 +95,10 @@ class RaspberryLogDto {
   ts?: number | string;
 
   @ApiProperty({ required: false })
-  accX?: number;
+  unix_timestamp?: number | string;
 
   @ApiProperty({ required: false })
-  acc_x?: number;
-
-  @ApiProperty({ required: false })
-  accY?: number;
-
-  @ApiProperty({ required: false })
-  acc_y?: number;
-
-  @ApiProperty({ required: false })
-  accZ?: number;
-
-  @ApiProperty({ required: false })
-  acc_z?: number;
-
-  @ApiProperty({ required: false })
-  gTotal?: number;
-
-  @ApiProperty({ required: false })
-  g_total?: number;
+  unix_times?: number | string;
 
   @ApiProperty({ required: false })
   ambientTemp?: number;
@@ -127,6 +113,9 @@ class RaspberryLogDto {
   sos?: boolean;
 
   @ApiProperty({ required: false })
+  sos_trigger?: boolean;
+
+  @ApiProperty({ required: false })
   fallAlert?: boolean;
 
   @ApiProperty({ required: false })
@@ -137,6 +126,12 @@ class RaspberryLogDto {
 
   @ApiProperty({ required: false })
   gait_label?: string;
+
+  @ApiProperty({ required: false })
+  thighnodeStatus?: string;
+
+  @ApiProperty({ required: false })
+  thighnode_status?: string;
 }
 
 class RaspberrySyncDto {
@@ -201,9 +196,13 @@ export class HealthController implements OnModuleInit {
 
     const grpcLogs = body.logs.map((log) => ({
       id: log.id,
-      heart_rate: log.data.heartRate,
-      spo2: log.data.spo2,
       temperature: log.data.temperature,
+      ambient_temp: log.data.ambientTemp,
+      moisture: log.data.moisture,
+      gait_label: log.data.gaitLabel,
+      sos: log.data.sos,
+      fall_alert: log.data.fallAlert,
+      thighnode_status: log.data.thighnodeStatus,
       timestamp: log.data.timestamp,
     }));
 
@@ -260,19 +259,14 @@ export class HealthController implements OnModuleInit {
 
       return {
         id: Number(log.id ?? index + 1),
-        heart_rate: Number(log.heartRate ?? log.heart_rate ?? 0),
-        spo2: Number(log.spo2 ?? 0),
         temperature: Number(log.temperature ?? log.temp ?? 0),
-        timestamp: ts,
-        acc_x: log.accX ?? log.acc_x,
-        acc_y: log.accY ?? log.acc_y,
-        acc_z: log.accZ ?? log.acc_z,
-        g_total: log.gTotal ?? log.g_total,
         ambient_temp: log.ambientTemp ?? log.ambient_temp,
         moisture: log.moisture,
-        sos: Boolean(log.sos ?? false),
-        fall_alert: Boolean(log.fallAlert ?? log.fall_alert ?? false),
         gait_label: log.gaitLabel ?? log.gait_label ?? '',
+        sos: Boolean(log.sos ?? log.sos_trigger ?? false),
+        fall_alert: Boolean(log.fallAlert ?? log.fall_alert ?? false),
+        thighnode_status: log.thighnodeStatus ?? log.thighnode_status ?? '',
+        timestamp: ts,
       };
     });
 

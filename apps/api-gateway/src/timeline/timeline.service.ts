@@ -196,7 +196,10 @@ export class TimelineService {
 
     for (const vital of vitals) {
       const hour = vital.timestamp.getUTCHours();
-      buckets.get(hour)?.push(this.resolveMetricValue(vital, metric));
+      const val = this.resolveMetricValue(vital, metric);
+      if (val !== null) {
+        buckets.get(hour)?.push(val);
+      }
     }
 
     return Array.from(buckets.entries()).map(([hour, values]) => ({
@@ -223,7 +226,10 @@ export class TimelineService {
 
     for (const vital of vitals) {
       const key = this.toDateKey(vital.timestamp);
-      days.get(key)?.push(this.resolveMetricValue(vital, metric));
+      const val = this.resolveMetricValue(vital, metric);
+      if (val !== null) {
+        days.get(key)?.push(val);
+      }
     }
 
     return Array.from(days.entries()).map(([day, values]) => ({
@@ -235,16 +241,16 @@ export class TimelineService {
   private resolveMetricValue(
     vital: Vital,
     metric: QueryTimelineVitalsDto['metric'],
-  ) {
+  ): number | null {
     switch (metric) {
       case 'temp':
-        return vital.temperature ?? 0;
+        return vital.temperature ?? null;
       case 'roomTemp':
-        return vital.roomTemperature ?? 0;
+        return vital.roomTemperature ?? null;
       case 'moisture':
-        return vital.moisture ?? 0;
+        return vital.moisture ?? null;
       case 'gait':
-        return vital.gaitAnalysis && vital.gaitAnalysis !== 'N/A' ? 1 : 0;
+        return vital.gaitAnalysis && vital.gaitAnalysis !== 'N/A' ? 1 : null;
     }
   }
 

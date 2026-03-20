@@ -11,6 +11,12 @@ export interface RawLog {
   moisture?: number;
   gaitLabel?: string;
   gait_label?: string;
+  sos?: boolean;
+  sos_trigger?: boolean;
+  fallAlert?: boolean;
+  fall_alert?: boolean;
+  thighnodeStatus?: string;
+  thighnode_status?: string;
   timestamp?: number | string;
   ts?: number | string;
   unix_timestamp?: number | string;
@@ -86,6 +92,7 @@ export class VitalSyncService {
           roomTemperature,
           moisture,
           gaitAnalysis,
+          thighnodeStatus: latest.thighnodeStatus ?? latest.thighnode_status ?? null,
           syncSlot: 'iot_live',
         }),
       );
