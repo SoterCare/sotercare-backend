@@ -22,7 +22,9 @@ services:
       - redis_data:/data
 
   api-gateway:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.full
     container_name: auth-backend
     env_file:
       - .env
