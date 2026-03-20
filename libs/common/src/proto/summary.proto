@@ -6,6 +6,7 @@ service SummaryService {
   rpc AnalyzeData (AnalyzeDataRequest) returns (AnalyzeDataResponse);
   rpc UploadPrescription (UploadPrescriptionRequest) returns (UploadPrescriptionResponse);
   rpc QueryPrescription (QueryPrescriptionRequest) returns (QueryPrescriptionResponse);
+  rpc SummarizeText (SummarizeTextRequest) returns (SummarizeTextResponse);
 }
 
 message AnalyzeDataRequest {
@@ -37,4 +38,12 @@ message QueryPrescriptionRequest {
 message QueryPrescriptionResponse {
   bool success = 1;
   string answer = 2;
+}
+
+message SummarizeTextRequest {
+  string text = 1;
+}
+
+message SummarizeTextResponse {
+  string summary = 1;
 }
