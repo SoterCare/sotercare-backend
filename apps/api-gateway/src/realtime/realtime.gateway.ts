@@ -230,6 +230,7 @@ export class RealtimeGateway
       device_key?: string;
       logs?: Array<Record<string, unknown>>;
       payload?: Record<string, unknown>;
+      realtime_only?: boolean;
     },
   ) {
     const logs =
@@ -301,9 +302,16 @@ export class RealtimeGateway
       };
     });
 
-    const result = await lastValueFrom(
-      this.healthService.syncLogs({ user_id: ownerId, logs: grpcLogs }),
-    );
+    const realtimeOnly = Boolean(body.realtime_only);
+    const result = realtimeOnly
+      ? {
+          success: true,
+          message: 'Realtime-only vital update accepted',
+          synced_count: 0,
+        }
+      : await lastValueFrom(
+          this.healthService.syncLogs({ user_id: ownerId, logs: grpcLogs }),
+        );
 
     // Upsert latest vital snapshot to the dashboard vitals table
     await this.vitalSyncService.upsertLatestVital(deviceId, grpcLogs);
