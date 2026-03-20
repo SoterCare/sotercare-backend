@@ -21,23 +21,23 @@ export class EmailServiceService {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Your SoterCare Verification Code</title>
 </head>
-<body style="margin:0;padding:0;background-color:#f1f3f4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,sans-serif;">
+<body style="margin:0;padding:0;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px;">
     <tr>
       <td align="center">
-        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.12),0 1px 2px rgba(0,0,0,0.08);overflow:hidden;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;">
 
           <!-- Header -->
           <tr>
-            <td style="background:#1a73e8;padding:28px 32px;text-align:center;">
-              <span style="color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.5px;">SoterCare</span>
+            <td style="background:#a0cbdb;padding:28px 32px;text-align:center;">
+              <span style="color:#2f2f2f;font-size:22px;font-weight:700;letter-spacing:-0.5px;">SoterCare</span>
             </td>
           </tr>
 
           <!-- Body -->
           <tr>
             <td style="padding:36px 32px 24px;">
-              <p style="margin:0 0 8px;font-size:15px;color:#202124;line-height:1.6;">Hi ${displayName},</p>
+              <p style="margin:0 0 8px;font-size:15px;color:#2f2f2f;line-height:1.6;">Hi ${displayName},</p>
               <p style="margin:0 0 28px;font-size:15px;color:#5f6368;line-height:1.6;">
                 Use the verification code below to complete your sign-in to SoterCare.
                 This code expires in <strong>5 minutes</strong>.
@@ -47,8 +47,8 @@ export class EmailServiceService {
               <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
                 <tr>
                   <td align="center">
-                    <div style="display:inline-block;border:2px solid #1a73e8;border-radius:8px;padding:16px 40px;background:#f8f9ff;">
-                      <span style="font-size:36px;font-weight:700;letter-spacing:10px;color:#1a73e8;font-family:'Courier New',Courier,monospace;">${otp}</span>
+                    <div style="display:inline-block;border:2px solid #a0cbdb;border-radius:8px;padding:16px 40px;background:#f0f7f9;">
+                      <span style="font-size:36px;font-weight:700;letter-spacing:10px;color:#2f2f2f;font-family:'Courier New',Courier,monospace;">${otp}</span>
                     </div>
                   </td>
                 </tr>
@@ -64,7 +64,7 @@ export class EmailServiceService {
                 <tr>
                   <td align="center">
                     <a href="https://sotercare.com/dashboard"
-                      style="display:inline-block;background:#1a73e8;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:12px 28px;border-radius:4px;letter-spacing:0.2px;">
+                      style="display:inline-block;background:#a0cbdb;color:#2f2f2f;text-decoration:none;font-size:14px;font-weight:600;padding:12px 28px;border-radius:4px;letter-spacing:0.2px;">
                       Open Dashboard →
                     </a>
                   </td>
@@ -78,7 +78,7 @@ export class EmailServiceService {
             <td style="padding:20px 32px;border-top:1px solid #e8eaed;text-align:center;">
               <p style="margin:0;font-size:12px;color:#80868b;line-height:1.6;">
                 © ${new Date().getFullYear()} SoterCare &nbsp;·&nbsp;
-                <a href="https://sotercare.com/dashboard" style="color:#1a73e8;text-decoration:none;">sotercare.com</a>
+                <a href="https://sotercare.com/dashboard" style="color:#2f2f2f;text-decoration:none;">sotercare.com</a>
                 &nbsp;·&nbsp; otp@sotercare.com
               </p>
             </td>
