@@ -22,7 +22,7 @@ import { TimelineModule } from './timeline/timeline.module';
 import { IotDeviceModule } from './iot-device/iot-device.module';
 import { RealtimeGateway } from './realtime/realtime.gateway';
 import { VitalSyncService } from './realtime/vital-sync.service';
-import { Vital } from './database/entities';
+import { Alert, Vital } from './database/entities';
 
 @Module({
   imports: [
@@ -55,7 +55,7 @@ import { Vital } from './database/entities';
     DashboardModule,
     AlertsModule,
     TimelineModule,
-    TypeOrmModule.forFeature([Vital]),
+    TypeOrmModule.forFeature([Vital, Alert]),
     ClientsModule.register([
       {
         name: 'AUTH_SERVICE',

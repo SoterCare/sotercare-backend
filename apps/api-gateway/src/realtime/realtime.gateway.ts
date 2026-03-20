@@ -9,12 +9,14 @@ import {
   WebSocketServer,
   WsException,
 } from '@nestjs/websockets';
-import { HttpException, Inject } from '@nestjs/common';
+import { HttpException, Inject, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { ClientGrpc } from '@nestjs/microservices';
 import { lastValueFrom, type Observable } from 'rxjs';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { Server, Socket } from 'socket.io';
-import { AlertType } from '../database/entities';
+import { Alert, AlertType, Vital } from '../database/entities';
 import { IotDeviceService } from '../iot-device/iot-device.service';
 import { SyncBatchDto } from '../sync/dto/sync-batch.dto';
 import { SyncService } from '../sync/sync.service';
@@ -59,6 +61,7 @@ export class RealtimeGateway
   server: Server;
 
   private healthService: HealthService;
+  private readonly logger = new Logger(RealtimeGateway.name);
 
   private readonly userSockets = new Map<number, Set<string>>();
   private readonly deviceSockets = new Map<string, string>();
@@ -72,6 +75,10 @@ export class RealtimeGateway
     private readonly iotDeviceService: IotDeviceService,
     private readonly vitalSyncService: VitalSyncService,
     private readonly syncService: SyncService,
+    @InjectRepository(Vital)
+    private readonly vitalRepository: Repository<Vital>,
+    @InjectRepository(Alert)
+    private readonly alertRepository: Repository<Alert>,
   ) {}
 
   afterInit() {
@@ -307,50 +314,68 @@ export class RealtimeGateway
           this.healthService.syncLogs({ user_id: ownerId, logs: grpcLogs }),
         );
 
-    const recentAlerts: SyncBatchDto['recentAlerts'] = [];
-    grpcLogs.forEach(log => {
-      if (log.sos) {
-        recentAlerts.push({
-          id: `sos_${log.timestamp}`,
-          deviceId: deviceId,
-          type: AlertType.MOVEMENT,
-          title: 'SOS Button Activated',
-          timestamp: new Date(log.timestamp).toISOString()
+    // Write vitals directly to the timeline table (bypass sync_history transaction)
+    for (const log of grpcLogs) {
+      try {
+        const ts = new Date(log.timestamp);
+        const existing = await this.vitalRepository.findOne({
+          where: { deviceId, timestamp: ts },
         });
+        if (!existing) {
+          await this.vitalRepository.save(
+            this.vitalRepository.create({
+              deviceId,
+              timestamp: ts,
+              temperature: log.temperature ?? null,
+              roomTemperature: log.ambient_temp ?? null,
+              moisture: log.moisture != null ? Math.round(log.moisture) : null,
+              gaitAnalysis: log.gait_label || null,
+              thighnodeStatus: log.thighnode_status || null,
+              syncSlot: 'iot_live',
+            }),
+          );
+        }
+        // Write SOS alert
+        if (log.sos) {
+          const alertId = `sos_${deviceId}_${log.timestamp}`;
+          const existingAlert = await this.alertRepository.findOne({ where: { id: alertId } });
+          if (!existingAlert) {
+            await this.alertRepository.save(
+              this.alertRepository.create({
+                id: alertId,
+                deviceId,
+                type: AlertType.MOVEMENT,
+                title: 'SOS Button Activated',
+                timestamp: ts,
+                isDismissed: false,
+                dismissedAt: null,
+                syncSlot: 'iot_live',
+              }),
+            );
+          }
+        }
+        // Write fall alert
+        if (log.fall_alert) {
+          const alertId = `fall_${deviceId}_${log.timestamp}`;
+          const existingAlert = await this.alertRepository.findOne({ where: { id: alertId } });
+          if (!existingAlert) {
+            await this.alertRepository.save(
+              this.alertRepository.create({
+                id: alertId,
+                deviceId,
+                type: AlertType.FALL,
+                title: 'Fall Detected',
+                timestamp: ts,
+                isDismissed: false,
+                dismissedAt: null,
+                syncSlot: 'iot_live',
+              }),
+            );
+          }
+        }
+      } catch (err) {
+        this.logger.warn(`Failed to save realtime vital to timeline for device ${deviceId}: ${err}`);
       }
-      if (log.fall_alert) {
-        recentAlerts.push({
-          id: `fall_${log.timestamp}`,
-          deviceId: deviceId,
-          type: AlertType.FALL,
-          title: 'Fall Detected',
-          timestamp: new Date(log.timestamp).toISOString()
-        });
-      }
-    });
-
-    const syncBatch: SyncBatchDto = {
-      source: 'websocket_realtime',
-      syncedAt: new Date().toISOString(),
-      slot: `live_${Date.now()}`,
-      gatewayHost: 'realtime_socket',
-      devices: [],
-      deviceStatuses: [],
-      latestVitals: grpcLogs.map(log => ({
-        deviceId,
-        timestamp: new Date(log.timestamp).toISOString(),
-        temperature: log.temperature,
-        roomTemperature: log.ambient_temp,
-        moisture: log.moisture,
-        gaitAnalysis: log.gait_label,
-        thighnodeStatus: log.thighnode_status
-      })),
-      recentAlerts,
-      recordingSessions: []
-    };
-
-    if (!realtimeOnly) {
-      await this.syncService.processRaspberryPiSync(ownerId, syncBatch);
     }
 
     // Upsert latest vital snapshot to the dashboard vitals table
