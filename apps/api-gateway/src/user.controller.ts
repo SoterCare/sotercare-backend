@@ -4,6 +4,7 @@ import { Observable, lastValueFrom } from 'rxjs';
 import { ApiTags, ApiOperation, ApiBody, ApiProperty, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { DevicesService } from './devices/devices.service';
 
 class UpdateProfileDto {
     @ApiProperty({ example: 'John Doe' })
@@ -40,7 +41,10 @@ interface AuthService {
 export class UserController implements OnModuleInit {
     private authService: AuthService;
 
-    constructor(@Inject('AUTH_SERVICE') private client: ClientGrpc) { }
+    constructor(
+        @Inject('AUTH_SERVICE') private client: ClientGrpc,
+        private readonly devicesService: DevicesService
+    ) { }
 
     onModuleInit() {
         this.authService = this.client.getService<AuthService>('AuthService');
@@ -49,7 +53,15 @@ export class UserController implements OnModuleInit {
     @Get('profile')
     @ApiOperation({ summary: 'Get current user profile' })
     async getProfile(@Req() req: any) {
-        return lastValueFrom(this.authService.getProfile({ id: req.user.userId }));
+        const profileResponse = await lastValueFrom(this.authService.getProfile({ id: req.user.userId }));
+        
+        // Append hasClaimedDevice status dynamically
+        if (profileResponse.success && profileResponse.user) {
+            const userDevices = await this.devicesService.getDevices(req.user.userId, false, true);
+            profileResponse.user.hasClaimedDevice = userDevices.devices.length > 0;
+        }
+        
+        return profileResponse;
     }
 
     @Post('update')
