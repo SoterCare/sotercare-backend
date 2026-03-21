@@ -119,7 +119,7 @@ export class ReportsController implements OnModuleInit {
             }
         }
 
-        // 3. Construct Response (Report only, no raw data)
+        // 3. Construct Response
         return {
             meta: {
                 startDate: body.startDate,
@@ -131,7 +131,8 @@ export class ReportsController implements OnModuleInit {
                 generatedAt: new Date().toISOString()
             },
             report: aiAnalysis.summary,
-            recommendations: aiAnalysis.recommendations
+            recommendations: aiAnalysis.recommendations,
+            logs: logs
         };
     }
 
