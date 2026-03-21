@@ -63,9 +63,9 @@ export class EmailServiceService {
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
-                    <a href="https://sotercare.com/dashboard"
+                    <a href="mailto:support@sotercare.com"
                       style="display:inline-block;background:#a0cbdb;color:#2f2f2f;text-decoration:none;font-size:14px;font-weight:600;padding:12px 28px;border-radius:4px;letter-spacing:0.2px;">
-                      Open Dashboard →
+                      Support →
                     </a>
                   </td>
                 </tr>
@@ -78,7 +78,7 @@ export class EmailServiceService {
             <td style="padding:20px 32px;border-top:1px solid #e8eaed;text-align:center;">
               <p style="margin:0;font-size:12px;color:#80868b;line-height:1.6;">
                 © ${new Date().getFullYear()} SoterCare &nbsp;·&nbsp;
-                <a href="https://sotercare.com/dashboard" style="color:#2f2f2f;text-decoration:none;">sotercare.com</a>
+                <a href="https://links.sotercare.com" style="color:#2f2f2f;text-decoration:none;">Connect With Us</a>
                 &nbsp;·&nbsp; otp@sotercare.com
               </p>
             </td>
