@@ -39,7 +39,11 @@ RUN npm run build:auth
 RUN npm run build:email
 RUN npm run build:health
 
+# Switch back to ai-summary-service context for gRPC generation
+WORKDIR /usr/src/app/apps/ai-summary-service
+
 # Create __init__.py files for Python package structure
+RUN mkdir -p src/generated
 RUN touch src/__init__.py src/core/__init__.py src/generated/__init__.py
 
 # Generate Proto code in the new src/generated directory
