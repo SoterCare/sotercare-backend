@@ -8,6 +8,7 @@ sleep 2
 # 2. Start Postgres
 echo "Starting Postgres..."
 # Fix permissions just in case
+mkdir -p /var/lib/postgresql
 chown -R postgres:postgres /var/lib/postgresql
 
 # Determine Postgres version (e.g. 13)

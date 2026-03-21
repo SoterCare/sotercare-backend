@@ -16,11 +16,21 @@ RUN npm install
 # Install Redis and Postgres and clean default data
 RUN apt-get update && apt-get install -y redis-server postgresql postgresql-contrib && rm -rf /var/lib/postgresql/ /var/log/postgresql/
 
+# Install Python dependencies using a virtual environment
+WORKDIR /usr/src/app/apps/ai-summary-service
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
+COPY apps/ai-summary-service/requirements.txt ./
+RUN pip3 install --no-cache-dir --default-timeout=100 -r requirements.txt
+
+# Go back to root
+WORKDIR /usr/src/app
+
 # Copy source code
 COPY . .
 
-# Copy and setup start script
-COPY start.sh ./
+# Setup start script
 RUN chmod +x start.sh
 
 # Build NestJS applications
@@ -28,13 +38,6 @@ RUN npm run build:api
 RUN npm run build:auth
 RUN npm run build:email
 RUN npm run build:health
-
-# Install Python dependencies using a virtual environment
-WORKDIR /usr/src/app/apps/ai-summary-service
-RUN python3 -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
-RUN pip3 install --no-cache-dir --default-timeout=100 -r requirements.txt
 
 # Create __init__.py files for Python package structure
 RUN touch src/__init__.py src/core/__init__.py src/generated/__init__.py
