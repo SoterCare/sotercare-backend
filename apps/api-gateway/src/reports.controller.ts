@@ -99,9 +99,17 @@ export class ReportsController implements OnModuleInit {
                     timestamp: log.timestamp
                 }));
 
-                console.log(`[ReportsController] Sending ${plainLogs.length} logs to AI (${JSON.stringify(plainLogs[0])})`);
+                // Downsample logs to prevent exceeding LLM context limits (max ~300 logs)
+                const MAX_LOGS = 300;
+                let sampledLogs = plainLogs;
+                if (plainLogs.length > MAX_LOGS) {
+                    const step = Math.ceil(plainLogs.length / MAX_LOGS);
+                    sampledLogs = plainLogs.filter((_, index) => index % step === 0);
+                }
+
+                console.log(`[ReportsController] Sending ${sampledLogs.length} logs to AI (downsampled from ${plainLogs.length})`);
                 const aiResponse = await lastValueFrom(this.summaryService.analyzeData({
-                    data_json: JSON.stringify(plainLogs),
+                    data_json: JSON.stringify(sampledLogs),
                     format: 'text' // Request text summary
                 }));
                 aiAnalysis = aiResponse;
