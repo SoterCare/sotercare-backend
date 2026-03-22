@@ -344,8 +344,8 @@ export class RealtimeGateway
               this.alertRepository.create({
                 id: alertId,
                 deviceId,
-                type: AlertType.MOVEMENT,
-                title: 'SOS Button Activated',
+                type: AlertType.HELP_CALL,
+                title: 'Help Call',
                 timestamp: ts,
                 isDismissed: false,
                 dismissedAt: null,

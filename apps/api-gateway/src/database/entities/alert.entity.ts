@@ -14,6 +14,7 @@ export enum AlertType {
   URINE = 'urine',
   TEMPERATURE = 'temperature',
   MOISTURE = 'moisture',
+  HELP_CALL = 'help_call',
 }
 
 @Entity({ name: 'alerts' })
