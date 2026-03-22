@@ -109,10 +109,13 @@ export class TimelineService {
           case AlertType.MOISTURE:
             accumulator.moisture += 1;
             break;
+          case AlertType.HELP_CALL:
+            accumulator.helpCalls += 1;
+            break;
         }
         return accumulator;
       },
-      { movements: 0, falls: 0, urine: 0, temperature: 0, moisture: 0 },
+      { movements: 0, falls: 0, urine: 0, temperature: 0, moisture: 0, helpCalls: 0 },
     );
 
     return counts;
