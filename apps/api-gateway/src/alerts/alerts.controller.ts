@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Query, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -34,6 +34,30 @@ export class AlertsController {
         query.deviceId,
         limit,
       ),
+    };
+  }
+
+  @Patch(':id/attend')
+  @ApiOperation({ summary: 'Mark an alert as attended (and dismiss it)' })
+  async attendAlert(
+    @CurrentUser() user: { userId: number },
+    @Param('id') id: string,
+  ) {
+    return {
+      success: true,
+      data: await this.alertsService.resolveAlert(user.userId, id, 'attended'),
+    };
+  }
+
+  @Patch(':id/false-alarm')
+  @ApiOperation({ summary: 'Mark an alert as a false alarm (and dismiss it)' })
+  async falseAlarm(
+    @CurrentUser() user: { userId: number },
+    @Param('id') id: string,
+  ) {
+    return {
+      success: true,
+      data: await this.alertsService.resolveAlert(user.userId, id, 'false-alarm'),
     };
   }
 }

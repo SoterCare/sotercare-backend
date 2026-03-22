@@ -22,7 +22,7 @@ export class TimelineService {
 
   async getVitalsTimeline(userId: number, query: QueryTimelineVitalsDto) {
     await this.ensureDeviceOwnership(userId, query.deviceId);
-    const { start, end } = this.getRange(query.period, query.date);
+    const { start, end } = this.getRange(query.period, query.date, undefined, query.startDate, query.endDate);
 
     const vitals = await this.vitalRepository.find({
       where: {
@@ -47,7 +47,7 @@ export class TimelineService {
 
   async getEvents(userId: number, query: QueryTimelineEventsDto) {
     await this.ensureDeviceOwnership(userId, query.deviceId);
-    const { start, end } = this.getRange(query.period, query.date);
+    const { start, end } = this.getRange(query.period, query.date, undefined, query.startDate, query.endDate);
 
     const where: FindOptionsWhere<Alert> = {
       deviceId: query.deviceId,
@@ -80,6 +80,8 @@ export class TimelineService {
       query.period,
       query.date ?? `${query.month}-01`,
       query.month,
+      query.startDate,
+      query.endDate
     );
 
     const alerts = await this.alertRepository.find({
@@ -202,10 +204,24 @@ export class TimelineService {
       }
     }
 
-    return Array.from(buckets.entries()).map(([hour, values]) => ({
+    const result = Array.from(buckets.entries()).map(([hour, values]) => ({
       xLabel: `${String(hour).padStart(2, '0')}:00`,
       value: this.averageValues(values, metric),
     }));
+
+    let firstIndex = -1;
+    let lastIndex = -1;
+    for (let i = 0; i < result.length; i++) {
+      if (result[i].value !== null) {
+        if (firstIndex === -1) firstIndex = i;
+        lastIndex = i;
+      }
+    }
+
+    if (firstIndex !== -1) {
+      return result.slice(firstIndex, lastIndex + 1);
+    }
+    return result;
   }
 
   private aggregateMultiDayVitals(
@@ -232,10 +248,24 @@ export class TimelineService {
       }
     }
 
-    return Array.from(days.entries()).map(([day, values]) => ({
+    const result = Array.from(days.entries()).map(([day, values]) => ({
       xLabel: day,
       value: this.averageValues(values, metric),
     }));
+
+    let firstIndex = -1;
+    let lastIndex = -1;
+    for (let i = 0; i < result.length; i++) {
+        if (result[i].value !== null) {
+            if (firstIndex === -1) firstIndex = i;
+            lastIndex = i;
+        }
+    }
+
+    if (firstIndex !== -1) {
+        return result.slice(firstIndex, lastIndex + 1);
+    }
+    return result;
   }
 
   private resolveMetricValue(
@@ -304,19 +334,28 @@ export class TimelineService {
   }
 
   private getRange(
-    period: 'day' | 'week' | 'month',
-    date: string,
+    period: 'day' | 'week' | 'month' | 'custom',
+    date?: string,
     month?: string,
+    startDate?: string,
+    endDate?: string,
   ) {
+    if (period === 'custom' && startDate && endDate) {
+      const start = new Date(`${startDate}T00:00:00.000Z`);
+      const end = new Date(`${endDate}T23:59:59.999Z`);
+      return { start, end };
+    }
+
     if (period === 'month') {
-      const monthValue = month ?? date.slice(0, 7);
+      const monthValue = month ?? (date ? date.slice(0, 7) : new Date().toISOString().slice(0, 7));
       const [year, monthNumber] = monthValue.split('-').map(Number);
       const start = new Date(Date.UTC(year, monthNumber - 1, 1));
       const end = new Date(Date.UTC(year, monthNumber, 0, 23, 59, 59, 999));
       return { start, end };
     }
 
-    const anchor = new Date(`${date}T00:00:00.000Z`);
+    const anchorDateString = date || new Date().toISOString().split('T')[0];
+    const anchor = new Date(`${anchorDateString}T00:00:00.000Z`);
     if (period === 'week') {
       const start = new Date(anchor);
       start.setUTCDate(start.getUTCDate() - 6);

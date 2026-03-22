@@ -40,6 +40,12 @@ export class Alert {
   @Column({ default: false })
   isDismissed: boolean;
 
+  @Column({ default: false })
+  isAttended: boolean;
+
+  @Column({ default: false })
+  isFalseAlarm: boolean;
+
   @Column({ type: 'timestamptz', nullable: true })
   dismissedAt: Date | null;
 

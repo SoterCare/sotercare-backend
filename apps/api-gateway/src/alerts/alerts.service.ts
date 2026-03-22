@@ -56,4 +56,28 @@ export class AlertsService {
       total: alerts.length,
     };
   }
+
+  async resolveAlert(userId: number, alertId: string, resolution: 'attended' | 'false-alarm') {
+    const alert = await this.alertRepository.findOne({
+      where: { id: alertId },
+      relations: ['device'],
+    });
+
+    if (!alert || alert.device.userId !== userId) {
+      throw new NotFoundException('Alert not found or access denied');
+    }
+
+    if (resolution === 'attended') {
+      alert.isAttended = true;
+    } else {
+      alert.isFalseAlarm = true;
+    }
+    
+    // Resolving an alert also implicitly dismisses it
+    alert.isDismissed = true;
+    alert.dismissedAt = new Date();
+
+    await this.alertRepository.save(alert);
+    return { id: alert.id, status: resolution, dismissedAt: alert.dismissedAt };
+  }
 }

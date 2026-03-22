@@ -7,9 +7,15 @@ export class QueryTimelineVitalsDto {
   @ApiProperty({ example: 'temp', enum: ['temp', 'roomTemp', 'moisture', 'gait'] })
   metric: 'temp' | 'roomTemp' | 'moisture' | 'gait';
 
-  @ApiProperty({ example: 'day', enum: ['day', 'week', 'month'] })
-  period: 'day' | 'week' | 'month';
+  @ApiProperty({ example: 'day', enum: ['day', 'week', 'month', 'custom'] })
+  period: 'day' | 'week' | 'month' | 'custom';
 
-  @ApiProperty({ example: '2026-03-12' })
-  date: string;
+  @ApiProperty({ example: '2026-03-12', required: false })
+  date?: string;
+
+  @ApiProperty({ example: '2026-03-01', required: false })
+  startDate?: string;
+
+  @ApiProperty({ example: '2026-03-15', required: false })
+  endDate?: string;
 }
