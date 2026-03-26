@@ -17,7 +17,7 @@ interface AlertCandidate {
   title: string;
 }
 
-const GAIT_MOVEMENT_LABELS = new Set(['Standing Up', 'Sitting Down']);
+const GAIT_MOVEMENT_LABELS = new Set(['standing up', 'sitting down']);
 
 @Injectable()
 export class AlertWriterService {
