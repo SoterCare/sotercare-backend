@@ -121,25 +121,11 @@ export class AlertWriterService {
   }
 
   private getMoistureCandidate(moisture: number): AlertCandidate | null {
-    if (moisture >= 75) {
-      return {
-        idPrefix: 'moisture_critical',
-        type: AlertType.MOISTURE,
-        title: 'Critical Moisture Level',
-      };
-    }
-    if (moisture >= 50) {
-      return {
-        idPrefix: 'moisture_high',
-        type: AlertType.MOISTURE,
-        title: 'High Moisture Level',
-      };
-    }
     if (moisture >= 25) {
       return {
-        idPrefix: 'moisture_elevated',
+        idPrefix: 'moisture',
         type: AlertType.MOISTURE,
-        title: 'Elevated Moisture Level',
+        title: 'Moisture Detected',
       };
     }
     return null;
