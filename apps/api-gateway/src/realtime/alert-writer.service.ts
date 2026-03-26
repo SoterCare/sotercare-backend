@@ -22,13 +22,6 @@ const GAIT_MOVEMENT_LABELS = new Set(['standing up', 'sitting down']);
 @Injectable()
 export class AlertWriterService {
   /**
-   * Last known gait label per device, used for transition detection.
-   * Keyed by deviceId. In-memory is fine — we only alert on transitions
-   * and a server restart merely means the next label is treated as a transition.
-   */
-  private readonly lastGaitLabel = new Map<string, string>();
-
-  /**
    * Derives all alert candidates for a single log entry and persists any
    * that are not yet in the database.  Returns the count of new alerts saved.
    */
@@ -38,7 +31,7 @@ export class AlertWriterService {
     syncSlot: string,
     alertRepo: Repository<Alert>,
   ): Promise<number> {
-    const candidates = this.deriveCandidates(deviceId, log);
+    const candidates = this.deriveCandidates(log);
     const ts = new Date(log.timestamp);
     let saved = 0;
 
@@ -67,7 +60,7 @@ export class AlertWriterService {
 
   // ─── Rule Engine ─────────────────────────────────────────────────────────────
 
-  private deriveCandidates(deviceId: string, log: NormalizedLog): AlertCandidate[] {
+  private deriveCandidates(log: NormalizedLog): AlertCandidate[] {
     const candidates: AlertCandidate[] = [];
 
     // 1. Help Call (SOS button)
@@ -100,26 +93,19 @@ export class AlertWriterService {
       if (candidate) candidates.push(candidate);
     }
 
-    // 5. Gait movement — only alert when the label *transitions* to a target.
-    //    Repeated consecutive readings of the same label are silently skipped.
+    // 5. Gait movement — fire on every log with a target label.
     const currentGait = log.gait_label ?? '';
-    const previousGait = this.lastGaitLabel.get(deviceId) ?? '';
-
-    if (currentGait !== previousGait) {
-      this.lastGaitLabel.set(deviceId, currentGait);
-
-      if (GAIT_MOVEMENT_LABELS.has(currentGait)) {
-        // Capitalise each word: "standing up" → "Standing Up"
-        const label = currentGait
-          .split(' ')
-          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-          .join(' ');
-        candidates.push({
-          idPrefix: `gait_${currentGait.replace(/\s+/g, '_')}`,
-          type: AlertType.MOVEMENT,
-          title: label,
-        });
-      }
+    if (GAIT_MOVEMENT_LABELS.has(currentGait)) {
+      // Capitalise each word: "standing up" → "Standing Up"
+      const label = currentGait
+        .split(' ')
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+      candidates.push({
+        idPrefix: `gait_${currentGait.replace(/\s+/g, '_')}`,
+        type: AlertType.MOVEMENT,
+        title: label,
+      });
     }
 
     return candidates;
