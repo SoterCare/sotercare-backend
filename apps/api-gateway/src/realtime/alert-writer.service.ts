@@ -109,10 +109,15 @@ export class AlertWriterService {
       this.lastGaitLabel.set(deviceId, currentGait);
 
       if (GAIT_MOVEMENT_LABELS.has(currentGait)) {
+        // Capitalise each word: "standing up" → "Standing Up"
+        const label = currentGait
+          .split(' ')
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(' ');
         candidates.push({
-          idPrefix: `gait_${currentGait.toLowerCase().replace(/\s+/g, '_')}`,
+          idPrefix: `gait_${currentGait.replace(/\s+/g, '_')}`,
           type: AlertType.MOVEMENT,
-          title: `Movement: ${currentGait}`,
+          title: label,
         });
       }
     }
