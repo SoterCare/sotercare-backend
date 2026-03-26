@@ -22,6 +22,7 @@ import { TimelineModule } from './timeline/timeline.module';
 import { IotDeviceModule } from './iot-device/iot-device.module';
 import { RealtimeGateway } from './realtime/realtime.gateway';
 import { VitalSyncService } from './realtime/vital-sync.service';
+import { AlertWriterService } from './realtime/alert-writer.service';
 import { Alert, Vital, SummaryHistory } from './database/entities';
 
 @Module({
@@ -112,6 +113,6 @@ import { Alert, Vital, SummaryHistory } from './database/entities';
     HealthController,
     ReportsController,
   ],
-  providers: [ApiGatewayService, JwtStrategy, RealtimeGateway, VitalSyncService],
+  providers: [ApiGatewayService, JwtStrategy, RealtimeGateway, VitalSyncService, AlertWriterService],
 })
 export class ApiGatewayModule {}

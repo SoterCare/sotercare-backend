@@ -16,11 +16,12 @@ import { lastValueFrom, type Observable } from 'rxjs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Server, Socket } from 'socket.io';
-import { Alert, AlertType, Vital } from '../database/entities';
+import { Alert, Vital } from '../database/entities';
 import { IotDeviceService } from '../iot-device/iot-device.service';
 import { SyncBatchDto } from '../sync/dto/sync-batch.dto';
 import { SyncService } from '../sync/sync.service';
 import { VitalSyncService } from './vital-sync.service';
+import { AlertWriterService } from './alert-writer.service';
 
 interface HealthService {
   syncLogs(data: unknown): Observable<unknown>;
@@ -75,6 +76,7 @@ export class RealtimeGateway
     private readonly iotDeviceService: IotDeviceService,
     private readonly vitalSyncService: VitalSyncService,
     private readonly syncService: SyncService,
+    private readonly alertWriterService: AlertWriterService,
     @InjectRepository(Vital)
     private readonly vitalRepository: Repository<Vital>,
     @InjectRepository(Alert)
@@ -335,44 +337,13 @@ export class RealtimeGateway
             }),
           );
         }
-        // Write SOS alert
-        if (log.sos) {
-          const alertId = `sos_${deviceId}_${log.timestamp}`;
-          const existingAlert = await this.alertRepository.findOne({ where: { id: alertId } });
-          if (!existingAlert) {
-            await this.alertRepository.save(
-              this.alertRepository.create({
-                id: alertId,
-                deviceId,
-                type: AlertType.HELP_CALL,
-                title: 'Help Call',
-                timestamp: ts,
-                isDismissed: false,
-                dismissedAt: null,
-                syncSlot: 'iot_live',
-              }),
-            );
-          }
-        }
-        // Write fall alert
-        if (log.fall_alert) {
-          const alertId = `fall_${deviceId}_${log.timestamp}`;
-          const existingAlert = await this.alertRepository.findOne({ where: { id: alertId } });
-          if (!existingAlert) {
-            await this.alertRepository.save(
-              this.alertRepository.create({
-                id: alertId,
-                deviceId,
-                type: AlertType.FALL,
-                title: 'Fall Detected',
-                timestamp: ts,
-                isDismissed: false,
-                dismissedAt: null,
-                syncSlot: 'iot_live',
-              }),
-            );
-          }
-        }
+        // Write all sensor-driven alerts via AlertWriterService
+        await this.alertWriterService.writeAlertsForLog(
+          deviceId,
+          log,
+          'iot_live',
+          this.alertRepository,
+        );
       } catch (err) {
         this.logger.warn(`Failed to save realtime vital to timeline for device ${deviceId}: ${err}`);
       }
