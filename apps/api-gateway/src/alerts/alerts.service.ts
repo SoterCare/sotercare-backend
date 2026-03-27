@@ -40,6 +40,7 @@ export class AlertsService {
       where: {
         deviceId: In(deviceIds),
         isDismissed: false,
+        isAttended: false,
       },
       order: { timestamp: 'DESC' },
       take: limit,
@@ -57,6 +58,48 @@ export class AlertsService {
     };
   }
 
+  async getAttendedAlerts(userId: number, deviceId?: string, limit = 50) {
+    let deviceIds: string[] = [];
+
+    if (deviceId) {
+      const device = await this.deviceRepository.findOne({
+        where: { id: deviceId, userId },
+      });
+      if (!device) {
+        throw new NotFoundException('Device not found or does not belong to user');
+      }
+      deviceIds = [deviceId];
+    } else {
+      const devices = await this.deviceRepository.find({ where: { userId } });
+      deviceIds = devices.map((d) => d.id);
+    }
+
+    if (deviceIds.length === 0) {
+      return { alerts: [], total: 0 };
+    }
+
+    const alerts = await this.alertRepository.find({
+      where: {
+        deviceId: In(deviceIds),
+        isAttended: true,
+      },
+      order: { timestamp: 'DESC' },
+      take: limit,
+    });
+
+    return {
+      alerts: alerts.map((alert) => ({
+        id: alert.id,
+        type: alert.type,
+        title: alert.title,
+        timestamp: alert.timestamp,
+        deviceId: alert.deviceId,
+        attendedAt: alert.timestamp,
+      })),
+      total: alerts.length,
+    };
+  }
+
   async resolveAlert(userId: number, alertId: string, resolution: 'attended' | 'false-alarm') {
     const alert = await this.alertRepository.findOne({
       where: { id: alertId },
@@ -69,15 +112,15 @@ export class AlertsService {
 
     if (resolution === 'attended') {
       alert.isAttended = true;
+      // Attended = valid alert acknowledged. Remove from feed but NOT recycle bin.
     } else {
       alert.isFalseAlarm = true;
+      // False alarm = dismissed to recycle bin.
+      alert.isDismissed = true;
+      alert.dismissedAt = new Date();
     }
-    
-    // Resolving an alert also implicitly dismisses it
-    alert.isDismissed = true;
-    alert.dismissedAt = new Date();
 
     await this.alertRepository.save(alert);
-    return { id: alert.id, status: resolution, dismissedAt: alert.dismissedAt };
+    return { id: alert.id, status: resolution };
   }
 }

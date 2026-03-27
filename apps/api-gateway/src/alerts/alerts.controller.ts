@@ -37,8 +37,28 @@ export class AlertsController {
     };
   }
 
+  @Get('attended')
+  @ApiOperation({ summary: 'Get alerts the user has confirmed and attended to' })
+  @ApiQuery({ name: 'deviceId', required: false, type: String })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getAttendedAlerts(
+    @CurrentUser() user: { userId: number },
+    @Query() query: QueryAlertsDto,
+  ) {
+    const limit = Number(query.limit ?? 50);
+
+    return {
+      success: true,
+      data: await this.alertsService.getAttendedAlerts(
+        user.userId,
+        query.deviceId,
+        limit,
+      ),
+    };
+  }
+
   @Patch(':id/attend')
-  @ApiOperation({ summary: 'Mark an alert as attended (and dismiss it)' })
+  @ApiOperation({ summary: 'Mark an alert as attended (confirmed valid)' })
   async attendAlert(
     @CurrentUser() user: { userId: number },
     @Param('id') id: string,
