@@ -194,37 +194,24 @@ export class TimelineService {
     vitals: Vital[],
     metric: QueryTimelineVitalsDto['metric'],
   ) {
-    const buckets = new Map<number, number[]>();
-    for (let hour = 0; hour < 24; hour += 1) {
-      buckets.set(hour, []);
-    }
+    // Return individual data points with actual HH:mm timestamps
+    // so short time-frame data is rendered at full resolution.
+    const points: { xLabel: string; value: number | null }[] = [];
 
     for (const vital of vitals) {
-      const hour = vital.timestamp.getUTCHours();
       const val = this.resolveMetricValue(vital, metric);
-      if (val !== null) {
-        buckets.get(hour)?.push(val);
-      }
+      if (val === null) continue;
+
+      const hours = String(vital.timestamp.getUTCHours()).padStart(2, '0');
+      const minutes = String(vital.timestamp.getUTCMinutes()).padStart(2, '0');
+
+      points.push({
+        xLabel: `${hours}:${minutes}`,
+        value: val,
+      });
     }
 
-    const result = Array.from(buckets.entries()).map(([hour, values]) => ({
-      xLabel: `${String(hour).padStart(2, '0')}:00`,
-      value: this.averageValues(values, metric),
-    }));
-
-    let firstIndex = -1;
-    let lastIndex = -1;
-    for (let i = 0; i < result.length; i++) {
-      if (result[i].value !== null) {
-        if (firstIndex === -1) firstIndex = i;
-        lastIndex = i;
-      }
-    }
-
-    if (firstIndex !== -1) {
-      return result.slice(firstIndex, lastIndex + 1);
-    }
-    return result;
+    return points;
   }
 
   private aggregateMultiDayVitals(
