@@ -87,13 +87,7 @@ export class AlertWriterService {
       if (candidate) candidates.push(candidate);
     }
 
-    // 4. Temperature thresholds (skin temp)
-    if (log.temperature != null) {
-      const candidate = this.getTemperatureCandidate(log.temperature);
-      if (candidate) candidates.push(candidate);
-    }
-
-    // 5. Gait movement — fire on every log with a target label.
+    // 4. Gait movement — fire on every log with a target label.
     const currentGait = log.gait_label ?? '';
     if (GAIT_MOVEMENT_LABELS.has(currentGait)) {
       // Capitalise each word: "standing up" → "Standing Up"
@@ -117,24 +111,6 @@ export class AlertWriterService {
         idPrefix: 'moisture',
         type: AlertType.MOISTURE,
         title: 'Moisture Detected',
-      };
-    }
-    return null;
-  }
-
-  private getTemperatureCandidate(temp: number): AlertCandidate | null {
-    if (temp > 39.5) {
-      return {
-        idPrefix: 'temp_urgent',
-        type: AlertType.TEMPERATURE,
-        title: 'Urgent High Temperature',
-      };
-    }
-    if (temp >= 38.5) {
-      return {
-        idPrefix: 'temp_monitor',
-        type: AlertType.TEMPERATURE,
-        title: 'Monitor Temperature',
       };
     }
     return null;
