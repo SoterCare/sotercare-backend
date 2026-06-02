@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
@@ -9,6 +10,8 @@ import {
 import { Device } from './device.entity';
 
 @Entity({ name: 'device_statuses' })
+// "Latest status per device" lookups filter by deviceId and order by receivedAt.
+@Index(['deviceId', 'receivedAt'])
 export class DeviceStatus {
   @PrimaryGeneratedColumn()
   id: number;

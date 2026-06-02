@@ -1,16 +1,21 @@
-import { Controller, Inject, OnModuleInit } from '@nestjs/common';
+import { Controller, Inject, Logger, OnModuleInit } from '@nestjs/common';
 import { GrpcMethod } from '@nestjs/microservices';
 import type { ClientGrpc } from '@nestjs/microservices';
 import { JwtService } from '@nestjs/jwt'; // Import JwtService
-import { Observable, lastValueFrom, of } from 'rxjs';
+import { Observable, lastValueFrom, timeout } from 'rxjs';
 import { AuthServiceService } from './auth-service.service';
 
 interface EmailService {
   sendOtpEmail(data: { email: string; otp: string; name?: string }): Observable<any>;
 }
 
+// Cap how long we'll wait on the email-service so a stalled dependency
+// can't hang login/registration indefinitely.
+const EMAIL_SEND_TIMEOUT_MS = 5000;
+
 @Controller()
 export class AuthServiceController implements OnModuleInit {
+  private readonly logger = new Logger(AuthServiceController.name);
   private emailService: EmailService;
 
   constructor(
@@ -23,12 +28,16 @@ export class AuthServiceController implements OnModuleInit {
     this.emailService = this.client.getService<EmailService>('EmailService');
   }
 
-  // ... (RegisterUser unchanged)
+  private sendOtpEmail(data: { email: string; otp: string; name?: string }): Promise<any> {
+    return lastValueFrom(
+      this.emailService.sendOtpEmail(data).pipe(timeout(EMAIL_SEND_TIMEOUT_MS)),
+    );
+  }
 
   @GrpcMethod('AuthService', 'RegisterUser')
   async registerUser(data: { name: string; email: string }): Promise<{ success: boolean; message: string }> {
-    console.log('RegisterUser', data);
-    // Logic: 
+    this.logger.log(`RegisterUser request for ${data?.email}`);
+    // Logic:
     // 1. Generate OTP
     try {
       const otp = this.authService.generateOtp();
@@ -36,17 +45,18 @@ export class AuthServiceController implements OnModuleInit {
       await this.authService.storeTempRegistration(data.email, data.name, otp);
 
       // 3. Send Email
-      await lastValueFrom(this.emailService.sendOtpEmail({ email: data.email, otp, name: data.name }));
+      await this.sendOtpEmail({ email: data.email, otp, name: data.name });
       return { success: true, message: 'OTP sent to email' };
     } catch (e) {
-      console.error('Error in RegisterUser:', e);
+      const message = e instanceof Error ? e.message : String(e);
+      this.logger.error(`Error in RegisterUser: ${message}`);
       return { success: false, message: 'Failed to process registration' };
     }
   }
 
   @GrpcMethod('AuthService', 'VerifyRegistration')
   async verifyRegistration(data: { email: string; otp: string }): Promise<{ success: boolean; message: string; accessToken?: string; user?: any }> {
-    console.log('VerifyRegistration', data);
+    this.logger.log(`VerifyRegistration request for ${data?.email}`);
     const isValid = await this.authService.verifyTempOtp(data.email, data.otp);
     if (!isValid) {
       return { success: false, message: 'Invalid OTP' };
@@ -71,31 +81,31 @@ export class AuthServiceController implements OnModuleInit {
 
   @GrpcMethod('AuthService', 'LoginInit')
   async loginInit(data: { email: string }): Promise<{ success: boolean; message: string }> {
-    console.log(`[LoginInit] Request received for: ${data.email}`);
+    this.logger.log(`[LoginInit] Request received for: ${data.email}`);
     const userExists = await this.authService.checkUserExists(data.email);
     if (!userExists) {
-      console.log(`[LoginInit] User not found: ${data.email}`);
+      this.logger.log(`[LoginInit] User not found: ${data.email}`);
       return { success: false, message: 'User not found' };
     }
     const otp = this.authService.generateOtp();
-    console.log(`[LoginInit] Generated OTP for ${data.email}: ${otp}`);
     await this.authService.storeLoginOtp(data.email, otp);
 
     try {
-      await lastValueFrom(this.emailService.sendOtpEmail({ email: data.email, otp }));
+      await this.sendOtpEmail({ email: data.email, otp });
       return { success: true, message: 'OTP sent to email' };
     } catch (e) {
-      console.error(`[LoginInit] Failed to send email: ${e.message}`);
+      const message = e instanceof Error ? e.message : String(e);
+      this.logger.error(`[LoginInit] Failed to send email: ${message}`);
       return { success: false, message: 'Failed to send email' };
     }
   }
 
   @GrpcMethod('AuthService', 'LoginVerify')
   async loginVerify(data: { email: string; otp: string }): Promise<{ success: boolean; message: string; accessToken: string; user?: any }> {
-    console.log(`[LoginVerify] Verifying OTP for: ${data.email}, OTP: ${data.otp}`);
+    this.logger.log(`[LoginVerify] Verifying OTP for: ${data.email}`);
     const isValid = await this.authService.verifyLoginOtp(data.email, data.otp);
     if (isValid) {
-      console.log(`[LoginVerify] Success for ${data.email}`);
+      this.logger.log(`[LoginVerify] Success for ${data.email}`);
       const user = await this.authService.getUserByEmail(data.email);
       if (!user) {
         return { success: false, message: 'User not found', accessToken: '' };
@@ -109,19 +119,19 @@ export class AuthServiceController implements OnModuleInit {
       const accessToken = this.jwtService.sign(payload);
       return { success: true, message: 'Login successful', accessToken, user };
     }
-    console.log(`[LoginVerify] Invalid OTP for ${data.email}`);
+    this.logger.log(`[LoginVerify] Invalid OTP for ${data.email}`);
     return { success: false, message: 'Invalid OTP', accessToken: '' };
   }
 
   @GrpcMethod('AuthService', 'UpdateProfile')
   async updateProfile(data: { id: number; name: string; email: string; mobileNumber: string }): Promise<{ success: boolean; message: string }> {
-    console.log(`[UpdateProfile] Request for user ID: ${data.id}`);
+    this.logger.log(`[UpdateProfile] Request for user ID: ${data.id}`);
     return this.authService.updateUser(data.id, data.name, data.email, data.mobileNumber);
   }
 
   @GrpcMethod('AuthService', 'GetProfile')
   async getProfile(data: { id: number }): Promise<{ success: boolean; message: string; user?: any }> {
-    console.log(`[GetProfile] Request for user ID: ${data.id}`);
+    this.logger.log(`[GetProfile] Request for user ID: ${data.id}`);
     const user = await this.authService.getUserById(data.id);
     if (!user) {
       return { success: false, message: 'User not found' };
@@ -131,17 +141,17 @@ export class AuthServiceController implements OnModuleInit {
 
   @GrpcMethod('AuthService', 'InitiateEmailUpdate')
   async initiateEmailUpdate(data: { userId: number; newEmail: string }): Promise<{ success: boolean; message: string }> {
-    console.log(`[InitiateEmailUpdate] Request for user ID: ${data.userId} to change email to: ${data.newEmail}`);
+    this.logger.log(`[InitiateEmailUpdate] Request for user ID: ${data.userId} to change email to: ${data.newEmail}`);
 
     const result = await this.authService.initiateEmailUpdate(data.userId, data.newEmail);
 
     if (result.success && result.otp) {
-      console.log(`[InitiateEmailUpdate] OTP for ${data.newEmail}: ${result.otp}`);
       // Send OTP email to the new email address
       try {
-        await lastValueFrom(this.emailService.sendOtpEmail({ email: data.newEmail, otp: result.otp }));
+        await this.sendOtpEmail({ email: data.newEmail, otp: result.otp });
       } catch (e) {
-        console.error(`[InitiateEmailUpdate] Failed to send email: ${e.message}`);
+        const message = e instanceof Error ? e.message : String(e);
+        this.logger.error(`[InitiateEmailUpdate] Failed to send email: ${message}`);
         return { success: false, message: 'Failed to send verification email' };
       }
     }
@@ -152,7 +162,7 @@ export class AuthServiceController implements OnModuleInit {
 
   @GrpcMethod('AuthService', 'VerifyEmailUpdate')
   async verifyEmailUpdate(data: { userId: number; newEmail: string; otp: string }): Promise<{ success: boolean; message: string }> {
-    console.log(`[VerifyEmailUpdate] Verifying OTP for user ID: ${data.userId}`);
+    this.logger.log(`[VerifyEmailUpdate] Verifying OTP for user ID: ${data.userId}`);
     return this.authService.verifyEmailUpdate(data.userId, data.newEmail, data.otp);
   }
 }

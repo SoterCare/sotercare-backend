@@ -65,11 +65,22 @@ export class HealthServiceService {
   }
 
   async getLogsByDateRange(userId: number, startDate: string, endDate: string): Promise<VitalSign[]> {
+    const start = new Date(startDate).getTime();
+    const end = new Date(endDate).getTime();
+
+    // Guard against invalid dates: getTime() returns NaN for unparseable input,
+    // which would otherwise bind NaN into the query and silently return wrong rows.
+    if (Number.isNaN(start) || Number.isNaN(end)) {
+      throw new Error('Invalid startDate or endDate');
+    }
+
     return this.vitalSignRepository
       .createQueryBuilder('vital')
+      // timestamp is a bigint stored as string — bind epoch-ms as strings so the
+      // comparison stays numeric/consistent with the stored representation.
       .where('vital.userId = :userId', { userId })
-      .andWhere('vital.timestamp >= :startDate', { startDate: new Date(startDate).getTime() })
-      .andWhere('vital.timestamp <= :endDate', { endDate: new Date(endDate).getTime() })
+      .andWhere('vital.timestamp >= :startDate', { startDate: start.toString() })
+      .andWhere('vital.timestamp <= :endDate', { endDate: end.toString() })
       .orderBy('vital.timestamp', 'ASC')
       .getMany();
   }

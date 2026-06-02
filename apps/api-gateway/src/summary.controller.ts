@@ -17,15 +17,9 @@ class SummarizeDto {
 class UploadPrescriptionDto {
     @ApiProperty({ type: 'string', format: 'binary' })
     file: any;
-
-    @ApiProperty({ example: '1' })
-    user_id: string;
 }
 
 class QueryPrescriptionDto {
-    @ApiProperty({ example: '1' })
-    user_id: string;
-
     @ApiProperty({ example: 'What medications are prescribed?' })
     question: string;
 }
@@ -182,12 +176,14 @@ export class SummaryController implements OnModuleInit {
     @ApiOperation({ summary: 'Upload a prescription PDF for analysis' })
     @UseInterceptors(FileInterceptor('file'))
     async uploadPrescription(
-        @Body() body: UploadPrescriptionDto,
         @UploadedFile() file: UploadedPrescriptionFile,
+        @Req() req: any,
     ) {
+        // Derive the owner from the authenticated token — never trust a client-supplied
+        // user_id (prevents reading/writing another user's prescriptions).
         return lastValueFrom(
             this.summaryService.uploadPrescription({
-                userId: parseInt(body.user_id, 10),
+                userId: req.user.userId,
                 fileData: file.buffer,
                 fileName: file.originalname,
             })
@@ -197,10 +193,10 @@ export class SummaryController implements OnModuleInit {
     @Post('query_prescription')
     @ApiOperation({ summary: 'Query the uploaded prescription using RAG' })
     @ApiBody({ type: QueryPrescriptionDto })
-    async queryPrescription(@Body() body: QueryPrescriptionDto) {
+    async queryPrescription(@Body() body: QueryPrescriptionDto, @Req() req: any) {
         return lastValueFrom(
             this.summaryService.queryPrescription({
-                userId: parseInt(body.user_id, 10),
+                userId: req.user.userId,
                 question: body.question,
             })
         );

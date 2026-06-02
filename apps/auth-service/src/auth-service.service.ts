@@ -1,11 +1,14 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { randomInt } from 'crypto';
 import type { RedisClientType } from 'redis';
 import { User } from './user.entity';
 
 @Injectable()
 export class AuthServiceService {
+  private readonly logger = new Logger(AuthServiceService.name);
+
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
@@ -14,14 +17,16 @@ export class AuthServiceService {
   ) { }
 
   generateOtp(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    // Cryptographically secure — Math.random() is predictable and unsafe for OTPs.
+    return randomInt(100000, 1000000).toString();
   }
 
   async storeTempRegistration(email: string, name: string, otp: string) {
     const key = `temp_reg:${email}`;
     // Store as JSON string, expires in 5 minutes (300 seconds)
     await this.redisClient.set(key, JSON.stringify({ name, otp }), { EX: 300 });
-    console.log(`Stored Temp Reg (Redis): ${email}, OTP: ${otp}`);
+    // Never log the OTP — it is a live credential.
+    this.logger.log(`Stored temp registration for ${email}`);
   }
 
   async verifyTempOtp(email: string, otp: string): Promise<boolean> {
@@ -29,8 +34,8 @@ export class AuthServiceService {
     const data = await this.redisClient.get(key);
     if (!data) return false;
 
-    const parsed = JSON.parse(data);
-    if (parsed.otp === otp) {
+    const parsed = this.safeParse(data);
+    if (parsed?.otp === otp) {
       // Don't delete yet, needed for creation
       return true;
     }
@@ -40,7 +45,7 @@ export class AuthServiceService {
   async createUser(email: string): Promise<User> {
     let user = await this.userRepository.findOneBy({ email });
     if (user) {
-      console.log(`User already exists: ${email}`);
+      this.logger.log(`User already exists: ${email}`);
       return user;
     }
 
@@ -48,15 +53,25 @@ export class AuthServiceService {
     const data = await this.redisClient.get(key);
     let name = 'Unknown';
     if (data) {
-      const parsed = JSON.parse(data);
-      name = parsed.name;
+      const parsed = this.safeParse(data);
+      if (parsed?.name) name = parsed.name;
       await this.redisClient.del(key); // Cleanup
     }
 
     user = this.userRepository.create({ email, name });
     await this.userRepository.save(user);
-    console.log(`User created (DB): ${email}`);
+    this.logger.log(`User created (DB): ${email}`);
     return user;
+  }
+
+  /** Tolerates corrupted Redis values instead of throwing an opaque gRPC error. */
+  private safeParse(data: string): { name?: string; otp?: string } | null {
+    try {
+      return JSON.parse(data);
+    } catch {
+      this.logger.warn('Failed to parse temp registration data from Redis');
+      return null;
+    }
   }
 
   async checkUserExists(email: string): Promise<boolean> {
@@ -67,7 +82,7 @@ export class AuthServiceService {
   async storeLoginOtp(email: string, otp: string) {
     const key = `login:${email}`;
     await this.redisClient.set(key, otp, { EX: 300 });
-    console.log(`Stored Login OTP (Redis): ${email}, OTP: ${otp}`);
+    this.logger.log(`Stored login OTP for ${email}`);
   }
 
   async verifyLoginOtp(email: string, otp: string): Promise<boolean> {
@@ -131,7 +146,7 @@ export class AuthServiceService {
     const otp = this.generateOtp();
     const key = `email_update:${userId}:${newEmail}`;
     await this.redisClient.set(key, otp, { EX: 300 }); // 5 min expiry
-    console.log(`[InitiateEmailUpdate] OTP for user ${userId} to change to ${newEmail}: ${otp}`);
+    this.logger.log(`[InitiateEmailUpdate] Stored email-update OTP for user ${userId} (${newEmail})`);
 
     return { success: true, message: 'Verification OTP sent to new email', otp };
   }
@@ -158,7 +173,7 @@ export class AuthServiceService {
     await this.userRepository.save(user);
     await this.redisClient.del(key); // Cleanup
 
-    console.log(`[VerifyEmailUpdate] User ${userId} email updated to ${newEmail}`);
+    this.logger.log(`[VerifyEmailUpdate] User ${userId} email updated to ${newEmail}`);
     return { success: true, message: 'Email updated successfully' };
   }
 }

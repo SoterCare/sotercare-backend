@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryColumn,
@@ -18,6 +19,10 @@ export enum AlertType {
 }
 
 @Entity({ name: 'alerts' })
+// Hot paths filter by deviceId and order by timestamp, and separately filter the
+// dismissed/attended flags — composite indexes serve those query shapes.
+@Index(['deviceId', 'timestamp'])
+@Index(['deviceId', 'isDismissed'])
 export class Alert {
   @PrimaryColumn()
   id: string;

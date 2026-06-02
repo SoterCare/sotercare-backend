@@ -7,11 +7,13 @@ import {
 } from 'typeorm';
 
 @Entity()
+// Hot path getLogsByDateRange/getLogDates filter by userId and range/sort by
+// timestamp — a composite index serves the scan + ordering in one shot.
+@Index(['userId', 'timestamp'])
 export class VitalSign {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Index()
   @Column()
   userId: number; // Reference to Auth Service User ID
 

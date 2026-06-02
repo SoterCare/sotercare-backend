@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
@@ -17,6 +18,8 @@ export class Device {
   @PrimaryColumn()
   id: string;
 
+  // userId is the WHERE column in nearly every device/dashboard/timeline lookup.
+  @Index()
   @Column()
   userId: number;
 
