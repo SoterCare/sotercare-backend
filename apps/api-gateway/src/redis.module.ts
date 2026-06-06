@@ -9,17 +9,19 @@ import { createClient } from 'redis';
         {
             provide: 'REDIS_CLIENT',
             useFactory: async (configService: ConfigService) => {
+                // Prefer REDIS_URL (supports rediss:// + auth for managed Redis);
+                // fall back to host/port for the embedded/local instance.
+                const redisUrl = configService.get<string>('REDIS_URL');
                 const host = configService.get<string>('REDIS_HOST', '127.0.0.1');
                 const port = configService.get<number>('REDIS_PORT', 6379);
+                const url = redisUrl || `redis://${host}:${port}`;
 
-                const client = createClient({
-                    url: `redis://${host}:${port}`,
-                });
+                const client = createClient({ url });
 
                 client.on('error', (err) => console.error('Redis Client Error', err));
                 await client.connect();
 
-                console.log(`[ApiGateway] Redis Connected to ${host}:${port}`);
+                console.log(`[ApiGateway] Redis Connected (${redisUrl ? 'REDIS_URL' : `${host}:${port}`})`);
                 return client;
             },
             inject: [ConfigService],

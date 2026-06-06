@@ -33,16 +33,29 @@ import { Alert, Vital, SummaryHistory } from './database/entities';
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get('DB_HOST', '127.0.0.1'),
-        port: Number(configService.get('DB_PORT', 5432)),
-        username: configService.get('DB_USER', 'postgres'),
-        password: configService.get('DB_PASS', 'postgres'),
-        database: configService.get('DB_NAME', 'auth_db'),
-        autoLoadEntities: true,
-        synchronize: true,
-      }),
+      useFactory: (configService: ConfigService) => {
+        // Prefer a managed connection string (Neon/Supabase/Koyeb Postgres) so the
+        // data lives outside the ephemeral container. SSL is required by those
+        // providers; auto-enable it whenever a URL is set (or DB_SSL=true).
+        const databaseUrl = configService.get<string>('DATABASE_URL');
+        const useSsl =
+          !!databaseUrl || configService.get('DB_SSL', 'false') === 'true';
+        return {
+          type: 'postgres',
+          ...(databaseUrl
+            ? { url: databaseUrl }
+            : {
+                host: configService.get<string>('DB_HOST', '127.0.0.1'),
+                port: Number(configService.get<string>('DB_PORT', '5432')),
+                username: configService.get<string>('DB_USER', 'postgres'),
+                password: configService.get<string>('DB_PASS', 'postgres'),
+                database: configService.get<string>('DB_NAME', 'auth_db'),
+              }),
+          ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+          autoLoadEntities: true,
+          synchronize: true,
+        };
+      },
       inject: [ConfigService],
     }),
     PassportModule,

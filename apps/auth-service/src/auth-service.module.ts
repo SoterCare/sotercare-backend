@@ -23,16 +23,26 @@ import { User } from './user.entity';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
-        const dbHost = configService.get('DB_HOST', '127.0.0.1');
-        const dbPort = configService.get('DB_PORT', 5432);
-        console.log(`[AuthService] Connecting to DB at ${dbHost}:${dbPort} (User: ${configService.get('DB_USER')})`);
+        // Prefer a managed connection string so data persists outside the
+        // ephemeral container; SSL auto-enables for managed URLs (or DB_SSL=true).
+        const databaseUrl = configService.get<string>('DATABASE_URL');
+        const useSsl =
+          !!databaseUrl || configService.get('DB_SSL', 'false') === 'true';
+        console.log(
+          `[AuthService] Connecting to DB via ${databaseUrl ? 'DATABASE_URL' : configService.get('DB_HOST', '127.0.0.1')} (ssl=${useSsl})`,
+        );
         return {
           type: 'postgres',
-          host: dbHost,
-          port: dbPort,
-          username: configService.get('DB_USER', 'postgres'),
-          password: configService.get('DB_PASS', 'postgres'),
-          database: configService.get('DB_NAME', 'auth_db'),
+          ...(databaseUrl
+            ? { url: databaseUrl }
+            : {
+                host: configService.get<string>('DB_HOST', '127.0.0.1'),
+                port: Number(configService.get<string>('DB_PORT', '5432')),
+                username: configService.get<string>('DB_USER', 'postgres'),
+                password: configService.get<string>('DB_PASS', 'postgres'),
+                database: configService.get<string>('DB_NAME', 'auth_db'),
+              }),
+          ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
           entities: [User],
           synchronize: true, // Auto-create tables (dev only)
         };
@@ -58,9 +68,12 @@ import { User } from './user.entity';
     {
       provide: 'REDIS_CLIENT',
       useFactory: async (configService: ConfigService) => {
-        const client = createClient({
-          url: `redis://${configService.get('REDIS_HOST', '127.0.0.1')}:${configService.get('REDIS_PORT', 6379)}`
-        });
+        // Prefer REDIS_URL (managed Redis); fall back to host/port for local.
+        const redisUrl = configService.get<string>('REDIS_URL');
+        const url =
+          redisUrl ||
+          `redis://${configService.get('REDIS_HOST', '127.0.0.1')}:${configService.get('REDIS_PORT', 6379)}`;
+        const client = createClient({ url });
         client.on('error', (err) => console.error('Redis Client Error', err));
         client.on('connect', () => console.log('Redis Client Connected'));
         await client.connect();
