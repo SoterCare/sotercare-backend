@@ -42,10 +42,6 @@ interface HealthService {
     getLogsByDateRange(data: { user_id: number; start_date: string; end_date: string }): Observable<any>;
 }
 
-interface SummaryService {
-    analyzeData(data: { data_json: string; format: string }): Observable<any>;
-}
-
 @ApiTags('reports')
 @ApiBearerAuth()
 @Controller('reports')
@@ -53,73 +49,30 @@ interface SummaryService {
 @UseInterceptors(IdempotencyInterceptor)
 export class ReportsController implements OnModuleInit {
     private healthService: HealthService;
-    private summaryService: SummaryService;
 
     constructor(
         @Inject('HEALTH_SERVICE') private healthClient: ClientGrpc,
-        @Inject('SUMMARY_SERVICE') private summaryClient: ClientGrpc,
         private readonly devicesService: DevicesService,
     ) { }
 
     onModuleInit() {
         this.healthService = this.healthClient.getService<HealthService>('HealthService');
-        this.summaryService = this.summaryClient.getService<SummaryService>('SummaryService');
     }
 
     @Post('export')
-    @ApiOperation({ summary: 'Get report data (Logs + AI Analysis) in JSON format' })
+    @ApiOperation({ summary: 'Get report data (logs) for a date range' })
     @ApiBody({ type: ExportReportDto })
     async exportReport(@Body() body: ExportReportDto, @Req() req: any) {
         const userId = req.user.userId;
-        console.log(`[ReportsController] Exporting data for user ${userId} (${body.startDate} - ${body.endDate})`);
 
-        // 1. Fetch Logs
         const logsResponse = await lastValueFrom(this.healthService.getLogsByDateRange({
             user_id: userId,
             start_date: body.startDate,
-            end_date: body.endDate
+            end_date: body.endDate,
         }));
 
         const logs = logsResponse.logs || [];
-        console.log(`[ReportsController] Fetched ${logs.length} logs`);
 
-        // 2. AI Analysis (Optional: Only if logs exist)
-        let aiAnalysis = { summary: 'No data to analyze', recommendations: '' };
-
-        if (logs.length > 0) {
-            try {
-                // Convert entity objects to plain data for serialization
-                const plainLogs = logs.map(log => ({
-                    temperature: log.temperature,
-                    ambientTemp: log.ambient_temp ?? log.ambientTemp,
-                    moisture: log.moisture,
-                    gaitLabel: log.gait_label ?? log.gaitLabel,
-                    sos: log.sos,
-                    fallAlert: log.fall_alert ?? log.fallAlert,
-                    timestamp: log.timestamp
-                }));
-
-                // Downsample logs to prevent exceeding LLM context limits (max ~300 logs)
-                const MAX_LOGS = 300;
-                let sampledLogs = plainLogs;
-                if (plainLogs.length > MAX_LOGS) {
-                    const step = Math.ceil(plainLogs.length / MAX_LOGS);
-                    sampledLogs = plainLogs.filter((_, index) => index % step === 0);
-                }
-
-                console.log(`[ReportsController] Sending ${sampledLogs.length} logs to AI (downsampled from ${plainLogs.length})`);
-                const aiResponse = await lastValueFrom(this.summaryService.analyzeData({
-                    data_json: JSON.stringify(sampledLogs),
-                    format: 'text' // Request text summary
-                }));
-                aiAnalysis = aiResponse;
-            } catch (e) {
-                console.error('AI Analysis failed:', e);
-                aiAnalysis = { summary: 'AI Analysis unavailable', recommendations: '' };
-            }
-        }
-
-        // 3. Construct Response
         return {
             meta: {
                 startDate: body.startDate,
@@ -128,11 +81,11 @@ export class ReportsController implements OnModuleInit {
                 metrics: body.metrics,
                 format: body.format,
                 dataPointsAnalyzed: logs.length,
-                generatedAt: new Date().toISOString()
+                generatedAt: new Date().toISOString(),
             },
-            report: aiAnalysis.summary,
-            recommendations: aiAnalysis.recommendations,
-            logs: logs
+            report: null,
+            recommendations: null,
+            logs,
         };
     }
 

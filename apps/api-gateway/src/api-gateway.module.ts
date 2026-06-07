@@ -9,7 +9,6 @@ import { ApiGatewayController } from './api-gateway.controller';
 import { ApiGatewayService } from './api-gateway.service';
 import { AuthController } from './auth.controller';
 import { UserController } from './user.controller';
-import { SummaryController } from './summary.controller';
 import { HealthController } from './health.controller';
 import { ReportsController } from './reports.controller';
 import { RedisModule } from './redis.module';
@@ -23,7 +22,7 @@ import { IotDeviceModule } from './iot-device/iot-device.module';
 import { RealtimeGateway } from './realtime/realtime.gateway';
 import { VitalSyncService } from './realtime/vital-sync.service';
 import { AlertWriterService } from './realtime/alert-writer.service';
-import { Alert, Vital, SummaryHistory } from './database/entities';
+import { Alert, Vital } from './database/entities';
 
 @Module({
   imports: [
@@ -69,7 +68,7 @@ import { Alert, Vital, SummaryHistory } from './database/entities';
     DashboardModule,
     AlertsModule,
     TimelineModule,
-    TypeOrmModule.forFeature([Vital, Alert, SummaryHistory]),
+    TypeOrmModule.forFeature([Vital, Alert]),
     ClientsModule.register([
       {
         name: 'AUTH_SERVICE',
@@ -78,24 +77,6 @@ import { Alert, Vital, SummaryHistory } from './database/entities';
           url: process.env.AUTH_SERVICE_URL || 'localhost:50051',
           package: 'auth',
           protoPath: join(__dirname, '../../../libs/common/src/proto/auth.proto'),
-        },
-      },
-      {
-        name: 'SUMMARY_SERVICE',
-        transport: Transport.GRPC,
-        options: {
-          url: process.env.SUMMARY_SERVICE_URL || 'localhost:50053',
-          package: 'summary',
-          protoPath: join(__dirname, '../../../libs/common/src/proto/summary.proto'),
-          loader: {
-            keepCase: true,
-            defaults: true,
-            json: true,
-            arrays: true,
-          },
-          // Set to 100 MB for large log payloads
-          maxReceiveMessageLength: 100 * 1024 * 1024,
-          maxSendMessageLength: 100 * 1024 * 1024,
         },
       },
       {
@@ -122,7 +103,6 @@ import { Alert, Vital, SummaryHistory } from './database/entities';
     ApiGatewayController,
     AuthController,
     UserController,
-    SummaryController,
     HealthController,
     ReportsController,
   ],
