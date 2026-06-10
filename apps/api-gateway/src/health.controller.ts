@@ -58,6 +58,12 @@ class VitalDataDto {
   @ApiPropertyOptional()
   thighnodeStatus?: string;
 
+  @ApiPropertyOptional()
+  heartRate?: number;
+
+  @ApiPropertyOptional()
+  spo2?: number;
+
   @ApiProperty()
   timestamp: number | string;
 }
@@ -132,6 +138,15 @@ class RaspberryLogDto {
 
   @ApiProperty({ required: false })
   thighnode_status?: string;
+
+  @ApiProperty({ required: false })
+  heartRate?: number;
+
+  @ApiProperty({ required: false })
+  heart_rate?: number;
+
+  @ApiProperty({ required: false })
+  spo2?: number;
 }
 
 class RaspberrySyncDto {
@@ -157,18 +172,21 @@ export class HealthController implements OnModuleInit {
     process.env.IOT_MAX_CLOCK_SKEW_MS || 15 * 60 * 1000,
   );
 
+  // Shared normalization (M1): accept unix seconds OR milliseconds and always
+  // return epoch-ms. Previously this path did NOT upconvert seconds, so a device
+  // sending second-precision timestamps was always rejected by replay protection.
   private toUnixMs(value: number | string | undefined): number {
     if (value === undefined || value === null) {
       return Date.now();
     }
 
     if (typeof value === 'number' && Number.isFinite(value)) {
-      return value;
+      return value < 1_000_000_000_000 ? value * 1000 : value;
     }
 
     const numeric = Number(value);
     if (!Number.isNaN(numeric) && Number.isFinite(numeric)) {
-      return numeric;
+      return numeric < 1_000_000_000_000 ? numeric * 1000 : numeric;
     }
 
     const parsed = Date.parse(String(value));
@@ -203,6 +221,9 @@ export class HealthController implements OnModuleInit {
       sos: log.data.sos,
       fall_alert: log.data.fallAlert,
       thighnode_status: log.data.thighnodeStatus,
+      // C1: forward heart_rate / spo2 so they reach vital_sign.
+      heart_rate: log.data.heartRate,
+      spo2: log.data.spo2,
       timestamp: log.data.timestamp,
     }));
 
@@ -266,6 +287,11 @@ export class HealthController implements OnModuleInit {
         sos: Boolean(log.sos ?? log.sos_trigger ?? false),
         fall_alert: Boolean(log.fallAlert ?? log.fall_alert ?? false),
         thighnode_status: log.thighnodeStatus ?? log.thighnode_status ?? '',
+        // C1: persist heart_rate / spo2. C2: tag every reading with the resolved
+        // physical device so the Safety Guard can attribute alerts correctly.
+        heart_rate: log.heartRate ?? log.heart_rate,
+        spo2: log.spo2,
+        device_id: deviceId,
         timestamp: ts,
       };
     });

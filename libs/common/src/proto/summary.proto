@@ -10,6 +10,7 @@ service SummaryService {
 message AnalyzeDataRequest {
   string data_json = 1;
   string format    = 2;
+  int32  user_id   = 3; // Authenticated user id (from JWT), used for report attribution
 }
 
 message AnalyzeDataResponse {

@@ -3,7 +3,7 @@ import type { ClientGrpc } from '@nestjs/microservices';
 import { lastValueFrom, Observable } from 'rxjs';
 
 interface SummaryGrpcService {
-  analyzeData(data: { data_json: string; format: string }): Observable<any>;
+  analyzeData(data: { data_json: string; format: string; user_id: number }): Observable<any>;
   uploadPrescription(data: { user_id: number; file_data: Buffer; file_name: string }): Observable<any>;
   queryPrescription(data: { user_id: number; question: string }): Observable<any>;
 }
@@ -19,9 +19,9 @@ export class SummaryService implements OnModuleInit {
     this.summaryGrpc = this.client.getService<SummaryGrpcService>('SummaryService');
   }
 
-  async analyzeData(dataJson: string): Promise<any> {
+  async analyzeData(dataJson: string, userId: number): Promise<any> {
     return lastValueFrom(
-      this.summaryGrpc.analyzeData({ data_json: dataJson, format: 'json' }),
+      this.summaryGrpc.analyzeData({ data_json: dataJson, format: 'json', user_id: userId }),
     );
   }
 

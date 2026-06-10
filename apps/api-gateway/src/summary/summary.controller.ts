@@ -47,7 +47,10 @@ export class SummaryController {
     }
 
     const sampledLogs = prepareLogs(body.logs ?? [], 200);
-    const grpcResponse = await this.summaryService.analyzeData(JSON.stringify(sampledLogs));
+    const grpcResponse = await this.summaryService.analyzeData(
+      JSON.stringify(sampledLogs),
+      userId,
+    );
 
     const reportJson = grpcResponse.report_json ?? grpcResponse.reportJson ?? null;
     let report: any = {};
