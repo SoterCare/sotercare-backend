@@ -38,6 +38,12 @@ export class VitalSign {
   @Column({ type: 'text', nullable: true })
   thighnodeStatus: string | null;
 
+  @Column({ type: 'int', nullable: true })
+  heartRate: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  spo2: number | null;
+
   @Column({ type: 'bigint' })
   timestamp: string; // Storing as string to handle BigInt safely
 

@@ -19,10 +19,8 @@ import { DevicesModule } from './devices/devices.module';
 import { SyncModule } from './sync/sync.module';
 import { TimelineModule } from './timeline/timeline.module';
 import { IotDeviceModule } from './iot-device/iot-device.module';
-import { RealtimeGateway } from './realtime/realtime.gateway';
-import { VitalSyncService } from './realtime/vital-sync.service';
-import { AlertWriterService } from './realtime/alert-writer.service';
-import { Alert, Vital } from './database/entities';
+import { RealtimeModule } from './realtime/realtime.module';
+import { SummaryModule } from './summary/summary.module';
 
 @Module({
   imports: [
@@ -68,7 +66,8 @@ import { Alert, Vital } from './database/entities';
     DashboardModule,
     AlertsModule,
     TimelineModule,
-    TypeOrmModule.forFeature([Vital, Alert]),
+    RealtimeModule,
+    SummaryModule,
     ClientsModule.register([
       {
         name: 'AUTH_SERVICE',
@@ -106,6 +105,6 @@ import { Alert, Vital } from './database/entities';
     HealthController,
     ReportsController,
   ],
-  providers: [ApiGatewayService, JwtStrategy, RealtimeGateway, VitalSyncService, AlertWriterService],
+  providers: [ApiGatewayService, JwtStrategy],
 })
 export class ApiGatewayModule {}
