@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Param, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Patch, Param, Post, Query, UnauthorizedException, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -79,5 +79,18 @@ export class AlertsController {
       success: true,
       data: await this.alertsService.resolveAlert(user.userId, id, 'false-alarm'),
     };
+  }
+
+  @Post('internal/alert-ready')
+  @UseGuards()
+  async alertReady(
+    @Body() body: { deviceId: string },
+    @Headers('x-internal-token') token: string,
+  ): Promise<void> {
+    const expectedToken = process.env.INTERNAL_SERVICE_TOKEN;
+    if (expectedToken && token !== expectedToken) {
+      throw new UnauthorizedException('Invalid internal token');
+    }
+    await this.alertsService.pushLatestAlert(body.deviceId);
   }
 }

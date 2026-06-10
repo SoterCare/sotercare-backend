@@ -1,0 +1,42 @@
+syntax = "proto3";
+package summary;
+
+service SummaryService {
+  rpc AnalyzeData          (AnalyzeDataRequest)          returns (AnalyzeDataResponse);
+  rpc UploadPrescription   (UploadPrescriptionRequest)   returns (UploadPrescriptionResponse);
+  rpc QueryPrescription    (QueryPrescriptionRequest)    returns (QueryPrescriptionResponse);
+}
+
+message AnalyzeDataRequest {
+  string data_json = 1;
+  string format    = 2;
+}
+
+message AnalyzeDataResponse {
+  string report_json              = 1;
+  bool   has_critical             = 2;
+  string overview                 = 3;
+  repeated string recommendations = 4;
+}
+
+message UploadPrescriptionRequest {
+  int32  user_id   = 1;
+  bytes  file_data = 2;
+  string file_name = 3;
+}
+
+message UploadPrescriptionResponse {
+  bool   success = 1;
+  string message = 2;
+  string doc_id  = 3;
+}
+
+message QueryPrescriptionRequest {
+  int32  user_id  = 1;
+  string question = 2;
+}
+
+message QueryPrescriptionResponse {
+  bool   success = 1;
+  string answer  = 2;
+}
