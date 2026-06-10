@@ -16,6 +16,10 @@ export enum AlertType {
   TEMPERATURE = 'temperature',
   MOISTURE = 'moisture',
   HELP_CALL = 'help_call',
+  // M7: distinct types so SpO2/HR anomalies are no longer mis-filed as
+  // 'temperature'/'movement' and the UI can render them correctly.
+  SPO2 = 'spo2',
+  HEART_RATE = 'heart_rate',
 }
 
 @Entity({ name: 'alerts' })

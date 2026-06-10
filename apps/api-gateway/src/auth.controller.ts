@@ -1,6 +1,6 @@
-import { Body, Controller, Inject, OnModuleInit, Post, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Inject, OnModuleInit, Post, UseGuards } from '@nestjs/common';
 import type { ClientGrpc } from '@nestjs/microservices'; // Correct import with type
-import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
+import { AuthThrottleGuard } from './common/guards/auth-throttle.guard';
 import type { Observable } from 'rxjs'; // import type
 import { lastValueFrom } from 'rxjs';
 import { ApiTags, ApiOperation, ApiBody, ApiProperty } from '@nestjs/swagger';
@@ -36,7 +36,10 @@ interface AuthService {
 
 @ApiTags('auth')
 @Controller('auth')
-@UseInterceptors(IdempotencyInterceptor)
+// M8: dropped IdempotencyInterceptor — it cached OTP-send responses for 24h, so a
+// reused Idempotency-Key returned a stale "OTP sent" without issuing a new code.
+// H7: per-IP rate limiting to blunt OTP brute force / email bombing.
+@UseGuards(AuthThrottleGuard)
 export class AuthController implements OnModuleInit {
     private authService: AuthService;
 
