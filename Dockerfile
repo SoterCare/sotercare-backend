@@ -46,10 +46,12 @@ WORKDIR /usr/src/app/apps/ai-summary-service
 RUN mkdir -p src/generated
 RUN touch src/__init__.py src/core/__init__.py src/generated/__init__.py
 
-# Generate Proto code in the new src/generated directory
+# Regenerate ALL proto stubs so gencode version always matches installed runtime
+RUN python3 -m grpc_tools.protoc -I../../libs/common/src/proto --python_out=src/generated --grpc_python_out=src/generated ../../libs/common/src/proto/health.proto
 RUN python3 -m grpc_tools.protoc -I../../libs/common/src/proto --python_out=src/generated --grpc_python_out=src/generated ../../libs/common/src/proto/summary.proto
 
-# Fix the relative import in generated grpc file
+# Fix relative imports in generated grpc files
+RUN sed -i 's/import health_pb2/from . import health_pb2/g' src/generated/health_pb2_grpc.py
 RUN sed -i 's/import summary_pb2/from . import summary_pb2/g' src/generated/summary_pb2_grpc.py
 
 # Go back to root
