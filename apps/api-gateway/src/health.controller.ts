@@ -6,6 +6,7 @@ import {
   Get,
   Headers,
   Inject,
+  Logger,
   OnModuleInit,
   Post,
   Query,
@@ -168,6 +169,7 @@ interface HealthService {
 @UseInterceptors(IdempotencyInterceptor)
 export class HealthController implements OnModuleInit {
   private healthService: HealthService;
+  private readonly logger = new Logger(HealthController.name);
   private readonly maxClockSkewMs = Number(
     process.env.IOT_MAX_CLOCK_SKEW_MS || 15 * 60 * 1000,
   );
@@ -227,9 +229,8 @@ export class HealthController implements OnModuleInit {
       timestamp: log.data.timestamp,
     }));
 
-    console.log(
-      `[HealthController] Syncing ${grpcLogs.length} logs for user ${userId}`,
-    );
+    // L4: userId is PII — keep it at debug, not always-on stdout.
+    this.logger.debug(`Syncing ${grpcLogs.length} logs for user ${userId}`);
 
     return lastValueFrom(
       this.healthService.syncLogs({ user_id: userId, logs: grpcLogs }),
@@ -326,7 +327,7 @@ export class HealthController implements OnModuleInit {
   @ApiOperation({ summary: 'Get dates with available logs' })
   async getLogDates(@Req() req: AuthenticatedRequest) {
     const userId = req.user.userId;
-    console.log(`[HealthController] Fetching log dates for user ${userId}`);
+    this.logger.debug(`Fetching log dates for user ${userId}`);
     return lastValueFrom(this.healthService.getLogDates({ user_id: userId }));
   }
 

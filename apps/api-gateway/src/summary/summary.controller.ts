@@ -7,6 +7,7 @@ import {
   UploadedFile,
   UseInterceptors,
   BadRequestException,
+  BadGatewayException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -53,11 +54,21 @@ export class SummaryController {
     );
 
     const reportJson = grpcResponse.report_json ?? grpcResponse.reportJson ?? null;
-    let report: any = {};
+
+    // L8: don't silently hand back an empty report. If the AI engine returned
+    // nothing (e.g. proto stubs missing or generation failed), surface a 502 so
+    // the client can distinguish "no data" from "engine error".
+    if (!reportJson) {
+      throw new BadGatewayException(
+        'Summary engine returned no report. Please retry shortly.',
+      );
+    }
+
+    let report: any;
     try {
-      if (reportJson) report = JSON.parse(reportJson);
+      report = JSON.parse(reportJson);
     } catch {
-      report = {};
+      throw new BadGatewayException('Summary engine returned a malformed report.');
     }
 
     const recommendations: string[] = grpcResponse.recommendations ?? report.recommendations ?? [];
