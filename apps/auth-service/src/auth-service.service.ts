@@ -16,9 +16,43 @@ export class AuthServiceService {
     private redisClient: RedisClientType,
   ) { }
 
+  // H7: OTP brute-force protection. After OTP_MAX_ATTEMPTS wrong codes for an
+  // email, lock verification for OTP_LOCKOUT_SECONDS. State lives in Redis so it
+  // holds across instances/restarts.
+  private readonly otpMaxAttempts = Number(process.env.OTP_MAX_ATTEMPTS || 5);
+  private readonly otpLockoutSeconds = Number(
+    process.env.OTP_LOCKOUT_SECONDS || 900,
+  );
+
   generateOtp(): string {
     // Cryptographically secure — Math.random() is predictable and unsafe for OTPs.
     return randomInt(100000, 1000000).toString();
+  }
+
+  private async isOtpLocked(email: string): Promise<boolean> {
+    const locked = await this.redisClient.get(`otp_lock:${email}`);
+    return Boolean(locked);
+  }
+
+  /** Count a failed OTP attempt; trip a lockout once the threshold is reached. */
+  private async recordOtpFailure(email: string): Promise<void> {
+    const key = `otp_attempts:${email}`;
+    const attempts = await this.redisClient.incr(key);
+    if (attempts === 1) {
+      await this.redisClient.expire(key, this.otpLockoutSeconds);
+    }
+    if (attempts >= this.otpMaxAttempts) {
+      await this.redisClient.set(`otp_lock:${email}`, '1', {
+        EX: this.otpLockoutSeconds,
+      });
+      await this.redisClient.del(key);
+      this.logger.warn(`OTP lockout engaged for ${email}`);
+    }
+  }
+
+  private async clearOtpFailures(email: string): Promise<void> {
+    await this.redisClient.del(`otp_attempts:${email}`);
+    await this.redisClient.del(`otp_lock:${email}`);
   }
 
   async storeTempRegistration(email: string, name: string, otp: string) {
@@ -30,6 +64,11 @@ export class AuthServiceService {
   }
 
   async verifyTempOtp(email: string, otp: string): Promise<boolean> {
+    // H7: during a lockout, reject without even checking the code.
+    if (await this.isOtpLocked(email)) {
+      return false;
+    }
+
     const key = `temp_reg:${email}`;
     const data = await this.redisClient.get(key);
     if (!data) return false;
@@ -37,8 +76,10 @@ export class AuthServiceService {
     const parsed = this.safeParse(data);
     if (parsed?.otp === otp) {
       // Don't delete yet, needed for creation
+      await this.clearOtpFailures(email);
       return true;
     }
+    await this.recordOtpFailure(email);
     return false;
   }
 
@@ -86,12 +127,19 @@ export class AuthServiceService {
   }
 
   async verifyLoginOtp(email: string, otp: string): Promise<boolean> {
+    // H7: during a lockout, reject without even checking the code.
+    if (await this.isOtpLocked(email)) {
+      return false;
+    }
+
     const key = `login:${email}`;
     const storedOtp = await this.redisClient.get(key);
     if (storedOtp === otp) {
       await this.redisClient.del(key);
+      await this.clearOtpFailures(email);
       return true;
     }
+    await this.recordOtpFailure(email);
     return false;
   }
   async getUserByEmail(email: string): Promise<User | null> {

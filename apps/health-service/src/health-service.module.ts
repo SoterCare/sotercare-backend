@@ -35,7 +35,8 @@ import { VitalSign } from './vital-sign.entity';
               }),
           ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
           entities: [VitalSign],
-          synchronize: true,
+          // C3: auto-create tables only outside production; prod uses migrations.
+          synchronize: process.env.NODE_ENV !== 'production',
         };
       },
       inject: [ConfigService],

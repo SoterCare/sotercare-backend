@@ -46,6 +46,9 @@ type NormalizedGrpcLog = {
   sos: boolean;
   thighnode_status: string;
   fall_alert: boolean;
+  heart_rate?: number;
+  spo2?: number;
+  device_id: string;
   timestamp: number;
 };
 
@@ -160,7 +163,8 @@ export class RealtimeGateway
 
     try {
       const payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
-        secret: process.env.JWT_SECRET || 'REMOVED-OLD-PUBLIC-FALLBACK',
+        // H2: require a real secret; no public 'REMOVED-OLD-PUBLIC-FALLBACK' fallback.
+        secret: process.env.JWT_SECRET,
       });
       const userId = Number(payload.userId);
       if (!Number.isFinite(userId)) {
@@ -301,6 +305,10 @@ export class RealtimeGateway
         sos: Boolean(log.sos ?? log.sos_trigger ?? false),
         thighnode_status: String(log.thighnodeStatus ?? log.thighnode_status ?? ''),
         fall_alert: Boolean(log.fallAlert ?? log.fall_alert ?? false),
+        // C1: carry heart_rate / spo2 into the synced reading. C2: tag the device.
+        heart_rate: this.toOptionalNumber(log.heartRate ?? log.heart_rate),
+        spo2: this.toOptionalNumber(log.spo2),
+        device_id: deviceId,
         timestamp: ts,
       };
     });

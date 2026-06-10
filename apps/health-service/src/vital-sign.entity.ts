@@ -8,14 +8,22 @@ import {
 
 @Entity()
 // Hot path getLogsByDateRange/getLogDates filter by userId and range/sort by
-// timestamp — a composite index serves the scan + ordering in one shot.
-@Index(['userId', 'timestamp'])
+// timestamp — a composite index serves the scan + ordering in one shot. The
+// unique constraint also dedupes: a user cannot have two readings at the same
+// epoch-ms, so client/device retries are safely insert-or-ignored.
+@Index(['userId', 'timestamp'], { unique: true })
 export class VitalSign {
   @PrimaryGeneratedColumn()
   id: number;
 
   @Column()
   userId: number; // Reference to Auth Service User ID
+
+  // Physical device that produced this reading. Nullable because app-only mobile
+  // sync may not be tied to a claimed IoT device. The Safety Guard uses this to
+  // resolve the owning device when writing alerts.
+  @Column({ type: 'text', nullable: true })
+  deviceId: string | null;
 
   @Column('float')
   temperature: number;

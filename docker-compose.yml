@@ -33,14 +33,21 @@ services:
       - "50051:50051"
       - "50052:50052"
       - "50053:50053"
+      # M6: health-service runs on 50054 — expose it too (was previously omitted).
+      - "50054:50054"
     environment:
       - DB_HOST=postgres
       - REDIS_HOST=redis
+      # All services are co-located in this single image, so the gateway reaches
+      # each microservice on localhost at its gRPC port.
       - AUTH_SERVICE_URL=localhost:50051
-      - SUMMARY_SERVICE_URL=localhost:50053
+      - EMAIL_SERVICE_URL=localhost:50052
+      - SUMMARY_GRPC_URL=localhost:50053
+      - HEALTH_SERVICE_URL=localhost:50054
       - AUTH_GRPC_URL=0.0.0.0:50051
       - EMAIL_GRPC_URL=0.0.0.0:50052
       - SUMMARY_GRPC_PORT=50053
+      - HEALTH_GRPC_URL=0.0.0.0:50054
     depends_on:
       - postgres
       - redis
