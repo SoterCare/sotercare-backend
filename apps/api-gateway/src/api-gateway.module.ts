@@ -20,6 +20,7 @@ import { SyncModule } from './sync/sync.module';
 import { TimelineModule } from './timeline/timeline.module';
 import { IotDeviceModule } from './iot-device/iot-device.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { SummaryModule } from './summary/summary.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { RealtimeModule } from './realtime/realtime.module';
     AlertsModule,
     TimelineModule,
     RealtimeModule,
+    SummaryModule,
     ClientsModule.register([
       {
         name: 'AUTH_SERVICE',

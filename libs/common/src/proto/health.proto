@@ -14,6 +14,8 @@ message LogEntry {
   string thighnode_status = 7;
   bool fall_alert = 8;
   int64 timestamp = 9;
+  int32 heart_rate = 10;
+  int32 spo2 = 11;
 }
 
 message SyncLogsRequest {
