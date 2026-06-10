@@ -22,6 +22,16 @@ import { IotDeviceModule } from './iot-device/iot-device.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { SummaryModule } from './summary/summary.module';
 
+// H2: never fall back to a public hard-coded secret. Fail fast at boot so a
+// missing JWT_SECRET can't silently make every token forgeable.
+function requireJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET environment variable must be set');
+  }
+  return secret;
+}
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -50,14 +60,16 @@ import { SummaryModule } from './summary/summary.module';
               }),
           ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
           autoLoadEntities: true,
-          synchronize: true,
+          // C3: auto-schema-sync only outside production. In prod, schema is
+          // managed by migrations so TypeORM can't drop/retype columns under us.
+          synchronize: process.env.NODE_ENV !== 'production',
         };
       },
       inject: [ConfigService],
     }),
     PassportModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'REMOVED-OLD-PUBLIC-FALLBACK',
+      secret: requireJwtSecret(),
     }),
     RedisModule,
     IotDeviceModule,

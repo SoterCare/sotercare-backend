@@ -163,7 +163,8 @@ export class RealtimeGateway
 
     try {
       const payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
-        secret: process.env.JWT_SECRET || 'REMOVED-OLD-PUBLIC-FALLBACK',
+        // H2: require a real secret; no public 'REMOVED-OLD-PUBLIC-FALLBACK' fallback.
+        secret: process.env.JWT_SECRET,
       });
       const userId = Number(payload.userId);
       if (!Number.isFinite(userId)) {

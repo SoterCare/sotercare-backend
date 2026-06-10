@@ -9,12 +9,24 @@ import { AuthServiceController } from './auth-service.controller';
 import { AuthServiceService } from './auth-service.service';
 import { User } from './user.entity';
 
+// H2: require a real secret; never sign with a public hard-coded fallback.
+function requireJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET environment variable must be set');
+  }
+  return secret;
+}
+
 @Module({
   imports: [
     JwtModule.register({
       global: true,
-      secret: process.env.JWT_SECRET || 'REMOVED-OLD-PUBLIC-FALLBACK',
-      signOptions: { expiresIn: '90d' },
+      secret: requireJwtSecret(),
+      // H5: tokens were valid for 90 days with no revocation. Default to a short
+      // lifetime, overridable via JWT_EXPIRES_IN (e.g. '7d', '12h'). Cast because
+      // @nestjs/jwt types expiresIn as the `ms` StringValue template, not string.
+      signOptions: { expiresIn: (process.env.JWT_EXPIRES_IN || '7d') as any },
     }),
     ConfigModule.forRoot({
       isGlobal: true,
@@ -44,7 +56,8 @@ import { User } from './user.entity';
               }),
           ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
           entities: [User],
-          synchronize: true, // Auto-create tables (dev only)
+          // C3: auto-create tables only outside production; prod uses migrations.
+          synchronize: process.env.NODE_ENV !== 'production',
         };
       },
       inject: [ConfigService],
