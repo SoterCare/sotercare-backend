@@ -246,8 +246,15 @@ export class HealthController implements OnModuleInit {
     @Headers('x-raspberry-key') raspberryKey?: string,
     @Headers('x-device-key') deviceKeyHeader?: string,
   ) {
+    // H1: fail closed. A missing RASPBERRY_API_KEY must disable the endpoint, not
+    // silently bypass the gateway-level key check.
     const expectedKey = process.env.RASPBERRY_API_KEY;
-    if (expectedKey && raspberryKey !== expectedKey) {
+    if (!expectedKey) {
+      throw new ForbiddenException(
+        'Raspberry sync disabled: RASPBERRY_API_KEY is not configured',
+      );
+    }
+    if (raspberryKey !== expectedKey) {
       throw new ForbiddenException('Invalid Raspberry API key');
     }
 
