@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
 import { ApiGatewayModule } from './api-gateway.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
@@ -12,6 +13,26 @@ async function bootstrap() {
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ extended: true, limit: '50mb' }));
   app.use(compression());
+
+  // H4: enable CORS (configurable via CORS_ORIGIN, comma-separated; defaults to
+  // permissive so existing native-app clients keep working).
+  const corsOrigin = process.env.CORS_ORIGIN;
+  app.enableCors({
+    origin: corsOrigin ? corsOrigin.split(',').map((o) => o.trim()) : true,
+    credentials: true,
+  });
+
+  // H4: enforce validation on DTOs that declare class-validator decorators and
+  // transform incoming payloads to their declared types. whitelist is left OFF
+  // intentionally: several DTOs are documented with @ApiProperty only (no
+  // validators yet), and whitelist would strip their unvalidated fields.
+  app.useGlobalPipes(
+    new ValidationPipe({
+      transform: true,
+      forbidUnknownValues: false,
+    }),
+  );
+
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new ResponseInterceptor());
 

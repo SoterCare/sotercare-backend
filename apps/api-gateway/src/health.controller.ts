@@ -6,6 +6,7 @@ import {
   Get,
   Headers,
   Inject,
+  Logger,
   OnModuleInit,
   Post,
   Query,
@@ -57,6 +58,12 @@ class VitalDataDto {
 
   @ApiPropertyOptional()
   thighnodeStatus?: string;
+
+  @ApiPropertyOptional()
+  heartRate?: number;
+
+  @ApiPropertyOptional()
+  spo2?: number;
 
   @ApiProperty()
   timestamp: number | string;
@@ -132,6 +139,15 @@ class RaspberryLogDto {
 
   @ApiProperty({ required: false })
   thighnode_status?: string;
+
+  @ApiProperty({ required: false })
+  heartRate?: number;
+
+  @ApiProperty({ required: false })
+  heart_rate?: number;
+
+  @ApiProperty({ required: false })
+  spo2?: number;
 }
 
 class RaspberrySyncDto {
@@ -153,22 +169,26 @@ interface HealthService {
 @UseInterceptors(IdempotencyInterceptor)
 export class HealthController implements OnModuleInit {
   private healthService: HealthService;
+  private readonly logger = new Logger(HealthController.name);
   private readonly maxClockSkewMs = Number(
     process.env.IOT_MAX_CLOCK_SKEW_MS || 15 * 60 * 1000,
   );
 
+  // Shared normalization (M1): accept unix seconds OR milliseconds and always
+  // return epoch-ms. Previously this path did NOT upconvert seconds, so a device
+  // sending second-precision timestamps was always rejected by replay protection.
   private toUnixMs(value: number | string | undefined): number {
     if (value === undefined || value === null) {
       return Date.now();
     }
 
     if (typeof value === 'number' && Number.isFinite(value)) {
-      return value;
+      return value < 1_000_000_000_000 ? value * 1000 : value;
     }
 
     const numeric = Number(value);
     if (!Number.isNaN(numeric) && Number.isFinite(numeric)) {
-      return numeric;
+      return numeric < 1_000_000_000_000 ? numeric * 1000 : numeric;
     }
 
     const parsed = Date.parse(String(value));
@@ -203,12 +223,14 @@ export class HealthController implements OnModuleInit {
       sos: log.data.sos,
       fall_alert: log.data.fallAlert,
       thighnode_status: log.data.thighnodeStatus,
+      // C1: forward heart_rate / spo2 so they reach vital_sign.
+      heart_rate: log.data.heartRate,
+      spo2: log.data.spo2,
       timestamp: log.data.timestamp,
     }));
 
-    console.log(
-      `[HealthController] Syncing ${grpcLogs.length} logs for user ${userId}`,
-    );
+    // L4: userId is PII — keep it at debug, not always-on stdout.
+    this.logger.debug(`Syncing ${grpcLogs.length} logs for user ${userId}`);
 
     return lastValueFrom(
       this.healthService.syncLogs({ user_id: userId, logs: grpcLogs }),
@@ -225,8 +247,15 @@ export class HealthController implements OnModuleInit {
     @Headers('x-raspberry-key') raspberryKey?: string,
     @Headers('x-device-key') deviceKeyHeader?: string,
   ) {
+    // H1: fail closed. A missing RASPBERRY_API_KEY must disable the endpoint, not
+    // silently bypass the gateway-level key check.
     const expectedKey = process.env.RASPBERRY_API_KEY;
-    if (expectedKey && raspberryKey !== expectedKey) {
+    if (!expectedKey) {
+      throw new ForbiddenException(
+        'Raspberry sync disabled: RASPBERRY_API_KEY is not configured',
+      );
+    }
+    if (raspberryKey !== expectedKey) {
       throw new ForbiddenException('Invalid Raspberry API key');
     }
 
@@ -266,6 +295,11 @@ export class HealthController implements OnModuleInit {
         sos: Boolean(log.sos ?? log.sos_trigger ?? false),
         fall_alert: Boolean(log.fallAlert ?? log.fall_alert ?? false),
         thighnode_status: log.thighnodeStatus ?? log.thighnode_status ?? '',
+        // C1: persist heart_rate / spo2. C2: tag every reading with the resolved
+        // physical device so the Safety Guard can attribute alerts correctly.
+        heart_rate: log.heartRate ?? log.heart_rate,
+        spo2: log.spo2,
+        device_id: deviceId,
         timestamp: ts,
       };
     });
@@ -293,7 +327,7 @@ export class HealthController implements OnModuleInit {
   @ApiOperation({ summary: 'Get dates with available logs' })
   async getLogDates(@Req() req: AuthenticatedRequest) {
     const userId = req.user.userId;
-    console.log(`[HealthController] Fetching log dates for user ${userId}`);
+    this.logger.debug(`Fetching log dates for user ${userId}`);
     return lastValueFrom(this.healthService.getLogDates({ user_id: userId }));
   }
 

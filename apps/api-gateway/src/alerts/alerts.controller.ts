@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Param, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Patch, Param, Post, Query, UnauthorizedException, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -79,5 +79,24 @@ export class AlertsController {
       success: true,
       data: await this.alertsService.resolveAlert(user.userId, id, 'false-alarm'),
     };
+  }
+
+  @Post('internal/alert-ready')
+  async alertReady(
+    @Body() body: { deviceId: string },
+    @Headers('x-internal-token') token: string,
+  ): Promise<void> {
+    // H1: fail closed. This internal webhook has no other auth, so a missing
+    // INTERNAL_SERVICE_TOKEN must disable it. (L1: removed the no-op @UseGuards().)
+    const expectedToken = process.env.INTERNAL_SERVICE_TOKEN;
+    if (!expectedToken) {
+      throw new UnauthorizedException(
+        'Internal endpoint disabled: INTERNAL_SERVICE_TOKEN is not configured',
+      );
+    }
+    if (token !== expectedToken) {
+      throw new UnauthorizedException('Invalid internal token');
+    }
+    await this.alertsService.pushLatestAlert(body.deviceId);
   }
 }

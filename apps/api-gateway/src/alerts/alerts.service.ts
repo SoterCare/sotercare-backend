@@ -1,15 +1,19 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Alert, Device } from '../database/entities';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 
 @Injectable()
 export class AlertsService {
+  private readonly logger = new Logger(AlertsService.name);
+
   constructor(
     @InjectRepository(Alert)
     private readonly alertRepository: Repository<Alert>,
     @InjectRepository(Device)
     private readonly deviceRepository: Repository<Device>,
+    private readonly realtimeGateway: RealtimeGateway,
   ) {}
 
   async getRecentAlerts(userId: number, deviceId?: string, limit = 20) {
@@ -122,5 +126,30 @@ export class AlertsService {
 
     await this.alertRepository.save(alert);
     return { id: alert.id, status: resolution };
+  }
+
+  async pushLatestAlert(deviceId: string): Promise<void> {
+    // 1. Find the device to get its owner userId
+    const device = await this.deviceRepository.findOne({ where: { id: deviceId } });
+    if (!device) {
+      this.logger.warn(`pushLatestAlert: device ${deviceId} not found`);
+      return;
+    }
+
+    // 2. Get the latest undismissed alert for this device
+    const alert = await this.alertRepository.findOne({
+      where: { deviceId, isDismissed: false },
+      order: { timestamp: 'DESC' },
+    });
+    if (!alert) return;
+
+    // 3. Emit via the realtime gateway
+    this.realtimeGateway.emitToUser(device.userId, 'alert.new', {
+      id: alert.id,
+      type: alert.type,
+      title: alert.title,
+      timestamp: alert.timestamp,
+      deviceId: alert.deviceId,
+    });
   }
 }

@@ -63,8 +63,15 @@ export class IotDeviceController {
     @Body() body: RegisterDeviceDto,
     @Headers('x-admin-key') adminKey?: string,
   ) {
+    // H1: fail closed. This endpoint has no other auth, so a missing
+    // DEVICE_BOOTSTRAP_KEY must disable it rather than leave it world-open.
     const bootstrapKey = process.env.DEVICE_BOOTSTRAP_KEY;
-    if (bootstrapKey && adminKey !== bootstrapKey) {
+    if (!bootstrapKey) {
+      throw new BadRequestException(
+        'Device registration disabled: DEVICE_BOOTSTRAP_KEY is not configured',
+      );
+    }
+    if (adminKey !== bootstrapKey) {
       throw new BadRequestException('Invalid bootstrap key');
     }
 

@@ -9,7 +9,6 @@ import { ApiGatewayController } from './api-gateway.controller';
 import { ApiGatewayService } from './api-gateway.service';
 import { AuthController } from './auth.controller';
 import { UserController } from './user.controller';
-import { SummaryController } from './summary.controller';
 import { HealthController } from './health.controller';
 import { ReportsController } from './reports.controller';
 import { RedisModule } from './redis.module';
@@ -20,10 +19,18 @@ import { DevicesModule } from './devices/devices.module';
 import { SyncModule } from './sync/sync.module';
 import { TimelineModule } from './timeline/timeline.module';
 import { IotDeviceModule } from './iot-device/iot-device.module';
-import { RealtimeGateway } from './realtime/realtime.gateway';
-import { VitalSyncService } from './realtime/vital-sync.service';
-import { AlertWriterService } from './realtime/alert-writer.service';
-import { Alert, Vital, SummaryHistory } from './database/entities';
+import { RealtimeModule } from './realtime/realtime.module';
+import { SummaryModule } from './summary/summary.module';
+
+// H2: never fall back to a public hard-coded secret. Fail fast at boot so a
+// missing JWT_SECRET can't silently make every token forgeable.
+function requireJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET environment variable must be set');
+  }
+  return secret;
+}
 
 @Module({
   imports: [
@@ -53,14 +60,16 @@ import { Alert, Vital, SummaryHistory } from './database/entities';
               }),
           ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
           autoLoadEntities: true,
-          synchronize: true,
+          // C3: auto-schema-sync only outside production. In prod, schema is
+          // managed by migrations so TypeORM can't drop/retype columns under us.
+          synchronize: process.env.NODE_ENV !== 'production',
         };
       },
       inject: [ConfigService],
     }),
     PassportModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'REMOVED-OLD-PUBLIC-FALLBACK',
+      secret: requireJwtSecret(),
     }),
     RedisModule,
     IotDeviceModule,
@@ -69,7 +78,8 @@ import { Alert, Vital, SummaryHistory } from './database/entities';
     DashboardModule,
     AlertsModule,
     TimelineModule,
-    TypeOrmModule.forFeature([Vital, Alert, SummaryHistory]),
+    RealtimeModule,
+    SummaryModule,
     ClientsModule.register([
       {
         name: 'AUTH_SERVICE',
@@ -78,24 +88,6 @@ import { Alert, Vital, SummaryHistory } from './database/entities';
           url: process.env.AUTH_SERVICE_URL || 'localhost:50051',
           package: 'auth',
           protoPath: join(__dirname, '../../../libs/common/src/proto/auth.proto'),
-        },
-      },
-      {
-        name: 'SUMMARY_SERVICE',
-        transport: Transport.GRPC,
-        options: {
-          url: process.env.SUMMARY_SERVICE_URL || 'localhost:50053',
-          package: 'summary',
-          protoPath: join(__dirname, '../../../libs/common/src/proto/summary.proto'),
-          loader: {
-            keepCase: true,
-            defaults: true,
-            json: true,
-            arrays: true,
-          },
-          // Set to 100 MB for large log payloads
-          maxReceiveMessageLength: 100 * 1024 * 1024,
-          maxSendMessageLength: 100 * 1024 * 1024,
         },
       },
       {
@@ -122,10 +114,9 @@ import { Alert, Vital, SummaryHistory } from './database/entities';
     ApiGatewayController,
     AuthController,
     UserController,
-    SummaryController,
     HealthController,
     ReportsController,
   ],
-  providers: [ApiGatewayService, JwtStrategy, RealtimeGateway, VitalSyncService, AlertWriterService],
+  providers: [ApiGatewayService, JwtStrategy],
 })
 export class ApiGatewayModule {}

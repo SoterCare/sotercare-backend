@@ -48,3 +48,8 @@ lerna-debug.log*
 
 # NestJS
 .nest-cli.json.lock
+
+
+#Claude
+/graphify-out
+.claude/worktrees/
