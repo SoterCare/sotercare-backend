@@ -1,5 +1,5 @@
 const { io } = require("socket.io-client");
-const socket = io("https://backend.sotercare.com/realtime", { transports: ["websocket"] });
+const socket = io("wss://backend.sotercare.com/realtime", { transports: ["websocket"] });
 
 let count = 0;
 let simulationInterval;
@@ -21,7 +21,7 @@ socket.on("connect", () => {
         return;
       }
       
-      const gaitLabels = ["sitting", "walking", "standing"];
+      const gaitLabels = ["walking", "standing up", "sitting down"];
       const randomGait = gaitLabels[Math.floor(Math.random() * gaitLabels.length)];
       const randomTemp = parseFloat((36.0 + Math.random() * 2).toFixed(1));
       const randomAmbient = parseFloat((24.0 + Math.random() * 2).toFixed(1));
@@ -36,7 +36,7 @@ socket.on("connect", () => {
         fall_alert: Math.random() > 0.95,
         unix_timestamp: Math.floor(Date.now() / 1000)
       };
-
+      console.log("logEntry", JSON.stringify(logEntry));
       socket.emit("device_data", { logs: [logEntry] }, (dataAck) => {
         console.log(`[Second ${count}] Sent random log:`, JSON.stringify(logEntry));
         console.log("dataAck:", JSON.stringify(dataAck));
