@@ -69,6 +69,7 @@ export class TimelineService {
         id: alert.id,
         type: alert.type,
         label: alert.title,
+        timestamp: alert.timestamp.getTime(),
         time: this.formatTime(alert.timestamp),
       })),
     };
@@ -167,7 +168,7 @@ export class TimelineService {
         id: item.id,
         type: item.type,
         title: item.title,
-        time: item.timestamp,
+        timestamp: item.timestamp.getTime(),
       })),
     };
   }

@@ -55,7 +55,7 @@ export class AlertsService {
         id: alert.id,
         type: alert.type,
         title: alert.title,
-        timestamp: alert.timestamp,
+        timestamp: alert.timestamp.getTime(),
         deviceId: alert.deviceId,
       })),
       total: alerts.length,
@@ -96,9 +96,9 @@ export class AlertsService {
         id: alert.id,
         type: alert.type,
         title: alert.title,
-        timestamp: alert.timestamp,
+        timestamp: alert.timestamp.getTime(),
         deviceId: alert.deviceId,
-        attendedAt: alert.timestamp,
+        attendedAt: alert.timestamp.getTime(),
       })),
       total: alerts.length,
     };
@@ -148,7 +148,7 @@ export class AlertsService {
       id: alert.id,
       type: alert.type,
       title: alert.title,
-      timestamp: alert.timestamp,
+      timestamp: alert.timestamp.getTime(),
       deviceId: alert.deviceId,
     });
   }

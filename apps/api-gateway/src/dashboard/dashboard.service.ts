@@ -34,7 +34,7 @@ export class DashboardService {
 
     return {
       deviceId,
-      timestamp: latestVital.timestamp,
+      timestamp: latestVital.timestamp.getTime(),
       temperature: latestVital.temperature,
       roomTemperature: latestVital.roomTemperature,
       moisture: latestVital.moisture,

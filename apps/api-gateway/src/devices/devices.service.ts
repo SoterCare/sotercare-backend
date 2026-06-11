@@ -48,16 +48,16 @@ export class DevicesService {
           name: device.name,
           type: device.type,
           status: inferredStatus,
-          lastSeenAt: device.lastSeenAt,
+          lastSeenAt: device.lastSeenAt?.getTime() ?? null,
           statusInferred: true,
           statusSource: device.syncSource,
           latestStatus: latestStatus
             ? {
                 battery: latestStatus.battery,
                 signalRssi: latestStatus.signalRssi,
-                connectedAt: latestStatus.connectedAt,
+                connectedAt: latestStatus.connectedAt?.getTime() ?? null,
                 bands: latestStatus.bands,
-                receivedAt: latestStatus.receivedAt,
+                receivedAt: latestStatus.receivedAt.getTime(),
               }
             : undefined,
         };
@@ -92,8 +92,8 @@ export class DevicesService {
       statusSource: device.syncSource,
       battery: latestStatus?.battery ?? null,
       signalRssi: latestStatus?.signalRssi ?? null,
-      connectedAt: latestStatus?.connectedAt ?? null,
-      lastSeenAt: device.lastSeenAt,
+      connectedAt: latestStatus?.connectedAt?.getTime() ?? null,
+      lastSeenAt: device.lastSeenAt?.getTime() ?? null,
       bands: latestStatus?.bands ?? [],
     };
   }
