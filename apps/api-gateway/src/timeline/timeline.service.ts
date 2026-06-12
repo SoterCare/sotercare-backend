@@ -25,12 +25,14 @@ export class TimelineService {
 
   async getVitalsTimeline(userId: number, query: QueryTimelineVitalsDto) {
     await this.ensureDeviceOwnership(userId, query.deviceId);
+    const tz = Math.round(Number(query.tzOffsetMinutes ?? 0));
     const { start, end } = this.getRange(
       query.period,
       query.date,
       undefined,
       query.startDate,
       query.endDate,
+      tz,
     );
 
     // Aggregate in SQL (GROUP BY time bucket + AVG/COUNT) instead of loading
@@ -56,13 +58,22 @@ export class TimelineService {
     start: Date,
     end: Date,
     unit: 'hour' | 'day',
-  ): Promise<{ bucket: Date | string; value: string | number | null }[]> {
-    const bucketExpr = `date_trunc('${unit}', v.timestamp)`;
+  ): Promise<{ bucket: Date | string | number; value: string | number | null }[]> {
+    // For day view: bucket by local hour (0-23) relative to the local midnight
+    // represented by `start`. This gives correct local-time hour labels
+    // regardless of the server or database timezone.
+    const bucketExpr =
+      unit === 'hour'
+        ? `FLOOR(EXTRACT(EPOCH FROM (v.timestamp - :start::timestamptz)) / 3600)::int`
+        : `date_trunc('${unit}', v.timestamp)`;
+
     const qb = this.vitalRepository
       .createQueryBuilder('v')
       .select(bucketExpr, 'bucket')
       .where('v."deviceId" = :deviceId', { deviceId: query.deviceId })
-      .andWhere('v.timestamp BETWEEN :start AND :end', { start, end })
+      .andWhere('v.timestamp BETWEEN :start AND :end')
+      .setParameter('start', start.toISOString())
+      .setParameter('end', end.toISOString())
       .groupBy(bucketExpr)
       .orderBy('bucket', 'ASC');
 
@@ -85,12 +96,15 @@ export class TimelineService {
 
   /** Day view: 24 hourly slots, null where the hour has no data. */
   private mapHourlyBuckets(
-    buckets: { bucket: Date | string; value: string | number | null }[],
+    buckets: { bucket: Date | string | number; value: string | number | null }[],
   ) {
     const byHour = new Map<number, number>();
     for (const row of buckets) {
-      const date = new Date(row.bucket);
-      byHour.set(date.getUTCHours(), this.roundBucketValue(row.value));
+      // bucket is now a local-hour integer 0-23 (from the FLOOR/EPOCH expression)
+      const hour = Number(row.bucket);
+      if (Number.isFinite(hour) && hour >= 0 && hour <= 23) {
+        byHour.set(hour, this.roundBucketValue(row.value));
+      }
     }
 
     return Array.from({ length: 24 }, (_, hour) => ({
@@ -142,12 +156,14 @@ export class TimelineService {
 
   async getEvents(userId: number, query: QueryTimelineEventsDto) {
     await this.ensureDeviceOwnership(userId, query.deviceId);
+    const tz = Math.round(Number(query.tzOffsetMinutes ?? 0));
     const { start, end } = this.getRange(
       query.period,
       query.date,
       undefined,
       query.startDate,
       query.endDate,
+      tz,
     );
 
     const where: FindOptionsWhere<Alert> = {
@@ -180,12 +196,14 @@ export class TimelineService {
 
   async getStats(userId: number, query: QueryTimelineStatsDto) {
     await this.ensureDeviceOwnership(userId, query.deviceId);
+    const tz = Math.round(Number(query.tzOffsetMinutes ?? 0));
     const { start, end } = this.getRange(
       query.period,
       query.date ?? `${query.month}-01`,
       query.month,
       query.startDate,
       query.endDate,
+      tz,
     );
 
     // COUNT per type in SQL — one row per alert type instead of every alert row.
@@ -236,16 +254,18 @@ export class TimelineService {
 
   async getDateOptions(userId: number, query: QueryDateOptionsDto) {
     await this.ensureDeviceOwnership(userId, query.deviceId);
+    const tz = Math.round(Number(query.tzOffsetMinutes ?? 0));
 
-    // Dedupe to calendar days in SQL — previously this loaded every vital row
-    // ever stored for the device just to derive the distinct dates.
+    // Group by local calendar day by shifting the UTC timestamp by the device
+    // timezone offset before truncating to a date string.
     const rows: { date: string }[] = await this.vitalRepository
       .createQueryBuilder('v')
       .select(
-        `DISTINCT to_char(v.timestamp AT TIME ZONE 'UTC', 'YYYY/MM/DD')`,
+        `DISTINCT to_char((v.timestamp AT TIME ZONE 'UTC') + (INTERVAL '1 minute' * :tz), 'YYYY/MM/DD')`,
         'date',
       )
       .where('v."deviceId" = :deviceId', { deviceId: query.deviceId })
+      .setParameter('tz', tz)
       .orderBy('date', 'DESC')
       .getRawMany();
 
@@ -336,10 +356,16 @@ export class TimelineService {
     month?: string,
     startDate?: string,
     endDate?: string,
+    tzOffsetMinutes: number = 0,
   ) {
+    // tzOffsetMinutes = -device.getTimezoneOffset() (positive for UTC+ zones).
+    // We subtract it from UTC midnight to get the UTC instant that corresponds
+    // to local midnight on the requested date.
+    const tzMs = tzOffsetMinutes * 60_000;
+
     if (period === 'custom' && startDate && endDate) {
-      const start = new Date(`${startDate}T00:00:00.000Z`);
-      const end = new Date(`${endDate}T23:59:59.999Z`);
+      const start = new Date(new Date(`${startDate}T00:00:00.000Z`).getTime() - tzMs);
+      const end   = new Date(new Date(`${endDate}T00:00:00.000Z`).getTime() - tzMs + 86_400_000 - 1);
       return { start, end };
     }
 
@@ -348,26 +374,25 @@ export class TimelineService {
         month ??
         (date ? date.slice(0, 7) : new Date().toISOString().slice(0, 7));
       const [year, monthNumber] = monthValue.split('-').map(Number);
-      const start = new Date(Date.UTC(year, monthNumber - 1, 1));
-      const end = new Date(Date.UTC(year, monthNumber, 0, 23, 59, 59, 999));
+      // Month boundaries: local midnight on day 1 → local midnight on last day+1
+      const start = new Date(Date.UTC(year, monthNumber - 1, 1) - tzMs);
+      const end   = new Date(Date.UTC(year, monthNumber,     0) - tzMs + 86_400_000 - 1);
       return { start, end };
     }
 
     const anchorDateString = date || new Date().toISOString().split('T')[0];
-    const anchor = new Date(`${anchorDateString}T00:00:00.000Z`);
-    if (period === 'week') {
-      const start = new Date(anchor);
-      start.setUTCDate(start.getUTCDate() - 6);
-      start.setUTCHours(0, 0, 0, 0);
 
-      const end = new Date(anchor);
-      end.setUTCHours(23, 59, 59, 999);
+    if (period === 'week') {
+      const anchorLocalMidnight = new Date(`${anchorDateString}T00:00:00.000Z`).getTime() - tzMs;
+      const start = new Date(anchorLocalMidnight - 6 * 86_400_000);
+      const end   = new Date(anchorLocalMidnight + 86_400_000 - 1);
       return { start, end };
     }
 
-    const start = new Date(anchor);
-    const end = new Date(anchor);
-    end.setUTCHours(23, 59, 59, 999);
+    // Day: exactly one local calendar day [local midnight, next local midnight)
+    const localMidnightMs = new Date(`${anchorDateString}T00:00:00.000Z`).getTime() - tzMs;
+    const start = new Date(localMidnightMs);
+    const end   = new Date(localMidnightMs + 86_400_000 - 1);
     return { start, end };
   }
 

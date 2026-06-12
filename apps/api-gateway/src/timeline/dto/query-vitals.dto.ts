@@ -18,4 +18,7 @@ export class QueryTimelineVitalsDto {
 
   @ApiProperty({ example: '2026-03-15', required: false })
   endDate?: string;
+
+  @ApiProperty({ example: 330, required: false, description: 'Device timezone offset in minutes (-getTimezoneOffset())' })
+  tzOffsetMinutes?: number;
 }

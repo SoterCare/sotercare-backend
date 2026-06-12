@@ -18,4 +18,7 @@ export class QueryTimelineEventsDto {
 
   @ApiPropertyOptional({ example: 'all', enum: ['all', 'movement', 'fall', 'urine', 'temperature', 'moisture'] })
   filter?: 'all' | 'movement' | 'fall' | 'urine' | 'temperature' | 'moisture';
+
+  @ApiPropertyOptional({ example: 330, description: 'Device timezone offset in minutes (-getTimezoneOffset())' })
+  tzOffsetMinutes?: number;
 }
