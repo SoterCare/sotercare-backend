@@ -16,6 +16,11 @@ export enum AlertType {
   TEMPERATURE = 'temperature',
   MOISTURE = 'moisture',
   HELP_CALL = 'help_call',
+  // Kept for DB compatibility — existing rows use these values.
+  // No new alerts of these types are generated; do not remove until
+  // a migration has cleared the old rows.
+  SPO2 = 'spo2',
+  HEART_RATE = 'heart_rate',
 }
 
 @Entity({ name: 'alerts' })
