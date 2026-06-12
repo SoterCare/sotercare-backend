@@ -42,8 +42,8 @@ export class HealthServiceService {
       entity.thighnodeStatus = log.thighnodeStatus ?? log.thighnode_status ?? null;
       // C1 fix: heart_rate / spo2 are now persisted so the Safety Guard's SpO2/HR
       // threshold checks operate on real data instead of always-NULL columns.
-      entity.heartRate = toInt(log.heartRate ?? log.heart_rate);
-      entity.spo2 = toInt(log.spo2);
+      entity.heartRate = toInt(log.heartRate ?? log.heart_rate) || null;
+      entity.spo2 = toInt(log.spo2) || null;
       entity.timestamp = (log.timestamp ?? log.ts ?? Date.now()).toString();
 
       return entity;

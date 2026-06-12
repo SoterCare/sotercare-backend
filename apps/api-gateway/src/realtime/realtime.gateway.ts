@@ -370,10 +370,13 @@ export class RealtimeGateway
     // Emit a summary instead of echoing the full log array back out — large
     // batches were doubling the payload on the user-facing socket.
     const timestamps = grpcLogs.map((log) => log.timestamp);
+    const latestLog = grpcLogs[grpcLogs.length - 1];
     this.emitToUser(ownerId, 'device.logs.ingested', {
       device_id: deviceId,
       count: grpcLogs.length,
-      latest: grpcLogs[grpcLogs.length - 1],
+      latest: latestLog,
+      // backward-compat: frontend reads event.logs[last] for live stats
+      logs: grpcLogs,
       time_range: {
         from: Math.min(...timestamps),
         to: Math.max(...timestamps),
