@@ -97,7 +97,7 @@ export class SummaryController {
 
   @Post()
   async generateSummary(
-    @Body() body: { text?: string; date?: string; logs?: any[] },
+    @Body() body: { text?: string; date?: string; logs?: any[]; startMs?: number; endMs?: number },
     @Req() req: any,
   ) {
     const userId: number = req.user.userId;
@@ -129,7 +129,12 @@ export class SummaryController {
     let grpcResponse: any;
     try {
       this.logger.log(`[generateSummary] calling gRPC analyzeData userId=${userId}`);
-      const requestData = JSON.stringify({ type: 'brief', date: reportDate });
+      const requestData = JSON.stringify({
+        type: 'brief',
+        date: reportDate,
+        start_ms: body.startMs ?? null,
+        end_ms: body.endMs ?? null,
+      });
       grpcResponse = await this.summaryService.analyzeData(requestData, userId);
       this.logger.log(
         `[generateSummary] gRPC response keys=${Object.keys(grpcResponse ?? {}).join(',')}`,
