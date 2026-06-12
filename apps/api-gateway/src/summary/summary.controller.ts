@@ -83,6 +83,7 @@ export class SummaryController {
   ) {
     const userId: number = req.user.userId;
     const reportDate = SummaryController.extractDate(body);
+    this.logger.log(`[generateSummary] userId=${userId} reportDate=${reportDate}`);
 
     // windowStart is UTC midnight for the report date — used as the cache key.
     const windowStart =
@@ -100,6 +101,7 @@ export class SummaryController {
       order: { createdAt: 'DESC' },
     });
     if (existing?.summary) {
+      this.logger.log(`[generateSummary] cache hit for userId=${userId}`);
       const cached = JSON.parse(existing.summary);
       return {
         cached: true,
@@ -131,9 +133,12 @@ export class SummaryController {
 
     let grpcResponse: any;
     try {
+      this.logger.log(`[generateSummary] calling gRPC analyzeData userId=${userId}`);
       const requestData = JSON.stringify({ type: 'brief', date: reportDate });
       grpcResponse = await this.summaryService.analyzeData(requestData, userId);
+      this.logger.log(`[generateSummary] gRPC response keys=${Object.keys(grpcResponse ?? {}).join(',')}`);
     } catch (err) {
+      this.logger.error(`[generateSummary] gRPC analyzeData failed: ${err instanceof Error ? err.message : String(err)}`);
       await this.releaseSummaryLock(userId, reportDate);
       throw err;
     }
