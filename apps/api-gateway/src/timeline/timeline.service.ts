@@ -154,6 +154,7 @@ export class TimelineService {
       deviceId: query.deviceId,
       timestamp: Between(start, end),
       isDismissed: false,
+      isAttended: true,
     };
 
     if (query.filter && query.filter !== 'all') {

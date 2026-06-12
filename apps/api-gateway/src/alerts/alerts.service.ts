@@ -138,7 +138,7 @@ export class AlertsService {
 
     // 2. Get the latest undismissed alert for this device
     const alert = await this.alertRepository.findOne({
-      where: { deviceId, isDismissed: false },
+      where: { deviceId, isDismissed: false, isAttended: false },
       order: { timestamp: 'DESC' },
     });
     if (!alert) return;

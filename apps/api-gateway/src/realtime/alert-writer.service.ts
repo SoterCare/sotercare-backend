@@ -17,7 +17,6 @@ interface AlertCandidate {
   title: string;
 }
 
-const GAIT_MOVEMENT_LABELS = new Set(['standing up', 'sitting down']);
 
 @Injectable()
 export class AlertWriterService {
@@ -117,21 +116,6 @@ export class AlertWriterService {
     if (log.moisture != null) {
       const candidate = this.getMoistureCandidate(log.moisture);
       if (candidate) candidates.push(candidate);
-    }
-
-    // 4. Gait movement — fire on every log with a target label.
-    const currentGait = log.gait_label ?? '';
-    if (GAIT_MOVEMENT_LABELS.has(currentGait)) {
-      // Capitalise each word: "standing up" → "Standing Up"
-      const label = currentGait
-        .split(' ')
-        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(' ');
-      candidates.push({
-        idPrefix: `gait_${currentGait.replace(/\s+/g, '_')}`,
-        type: AlertType.MOVEMENT,
-        title: label,
-      });
     }
 
     return candidates;
