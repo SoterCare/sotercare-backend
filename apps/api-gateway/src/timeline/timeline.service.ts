@@ -115,7 +115,7 @@ export class TimelineService {
 
   /** Multi-day view: one point per day, trimmed of leading/trailing empty days. */
   private mapDailyBuckets(
-    buckets: { bucket: Date | string; value: string | number | null }[],
+    buckets: { bucket: Date | string | number; value: string | number | null }[],
     start: Date,
     end: Date,
   ) {
