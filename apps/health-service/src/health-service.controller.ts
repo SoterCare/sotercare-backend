@@ -14,8 +14,6 @@ export class HealthServiceController {
     const userId = data.user_id || data.userId;
     const logs = data.logs || [];
 
-    // PII (userId) — keep at debug level rather than always-on stdout.
-    this.logger.debug(`Syncing ${logs.length} logs for user ${userId}`);
     return this.healthService.syncLogs(userId, logs);
   }
 

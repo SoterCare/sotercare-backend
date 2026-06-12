@@ -233,8 +233,6 @@ export class HealthController implements OnModuleInit {
       timestamp: log.data.timestamp,
     }));
 
-    // L4: userId is PII — keep it at debug, not always-on stdout.
-    this.logger.debug(`Syncing ${grpcLogs.length} logs for user ${userId}`);
 
     return lastValueFrom(
       this.healthService
