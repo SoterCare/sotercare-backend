@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
   UseGuards,
   Req,
@@ -9,16 +10,19 @@ import {
   BadRequestException,
   BadGatewayException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Not, IsNull } from 'typeorm';
 import type { RedisClientType } from 'redis';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { SummaryService } from './summary.service';
 import { SummaryHistory } from './summary-history.entity';
+
+const GENERATION_LIMIT = 5;
 
 @Controller('summary')
 @UseGuards(JwtAuthGuard)
@@ -76,6 +80,15 @@ export class SummaryController {
     return 'today';
   }
 
+  @Get('usage')
+  async getUsage(@Req() req: any) {
+    const userId: number = req.user.userId;
+    const used = await this.summaryHistoryRepo.count({
+      where: { userId, reportType: 'on_demand', windowStart: Not(IsNull()) },
+    });
+    return { used, limit: GENERATION_LIMIT };
+  }
+
   @Post()
   async generateSummary(
     @Body() body: { text?: string; date?: string; logs?: any[] },
@@ -95,6 +108,11 @@ export class SummaryController {
           })()
         : new Date(`${reportDate}T00:00:00.000Z`);
 
+    // Count total on-demand generations for this user.
+    const used = await this.summaryHistoryRepo.count({
+      where: { userId, reportType: 'on_demand', windowStart: Not(IsNull()) },
+    });
+
     // Cache check: return existing report for this date if one exists.
     const existing = await this.summaryHistoryRepo.findOne({
       where: { userId, windowStart },
@@ -108,7 +126,16 @@ export class SummaryController {
         summary: cached.summary ?? '',
         report: cached,
         hasCritical: existing.hasCritical,
+        used,
+        limit: GENERATION_LIMIT,
       };
+    }
+
+    // Enforce generation limit (cache hits above are free).
+    if (used >= GENERATION_LIMIT) {
+      throw new ForbiddenException(
+        `Generation limit reached (${GENERATION_LIMIT}/${GENERATION_LIMIT}). No generations remaining.`,
+      );
     }
 
     if (!(await this.acquireSummaryLock(userId, reportDate))) {
@@ -180,6 +207,8 @@ export class SummaryController {
       summary: report.summary ?? '',
       report,
       hasCritical,
+      used: used + 1,
+      limit: GENERATION_LIMIT,
     };
   }
 
