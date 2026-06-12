@@ -77,29 +77,32 @@ export class VitalSyncService {
     }
 
     try {
-      // Check for exact duplicate (deviceId + timestamp)
-      const existing = await this.vitalRepository.findOne({
-        where: { deviceId, timestamp },
-      });
+      // Single round-trip, race-free: ON CONFLICT DO NOTHING against the
+      // unique (deviceId, timestamp) index replaces the old findOne-then-save.
+      const result = await this.vitalRepository
+        .createQueryBuilder()
+        .insert()
+        .values(
+          this.vitalRepository.create({
+            deviceId,
+            timestamp,
+            temperature,
+            roomTemperature,
+            moisture,
+            gaitAnalysis,
+            thighnodeStatus: latest.thighnodeStatus ?? latest.thighnode_status ?? null,
+            syncSlot: 'iot_live',
+          }),
+        )
+        .orIgnore()
+        .execute();
 
-      if (existing) return;
-
-      await this.vitalRepository.save(
-        this.vitalRepository.create({
-          deviceId,
-          timestamp,
-          temperature,
-          roomTemperature,
-          moisture,
-          gaitAnalysis,
-          thighnodeStatus: latest.thighnodeStatus ?? latest.thighnode_status ?? null,
-          syncSlot: 'iot_live',
-        }),
-      );
-
-      this.logger.log(
-        `Vital upserted for device ${deviceId} at ${timestamp.toISOString()}`,
-      );
+      // RETURNING yields rows only for actual inserts; conflicts come back empty.
+      if (Array.isArray(result.raw) && result.raw.length > 0) {
+        this.logger.log(
+          `Vital upserted for device ${deviceId} at ${timestamp.toISOString()}`,
+        );
+      }
     } catch (err) {
       // Non-fatal — health data still saved via gRPC
       this.logger.warn(`Failed to upsert vital for device ${deviceId}: ${err}`);

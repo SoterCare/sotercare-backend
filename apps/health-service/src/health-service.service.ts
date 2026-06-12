@@ -1,10 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { VitalSign } from './vital-sign.entity';
 
+// Hard cap on rows returned by a single date-range query so an unbounded
+// range (e.g. years of 1Hz readings) cannot load the whole table into memory.
+const MAX_RANGE_ROWS = 50000;
+
 @Injectable()
 export class HealthServiceService {
+  private readonly logger = new Logger(HealthServiceService.name);
+
   constructor(
     @InjectRepository(VitalSign)
     private vitalSignRepository: Repository<VitalSign>,
@@ -64,28 +70,21 @@ export class HealthServiceService {
   }
 
   async getLogDates(userId: number): Promise<string[]> {
-    // Query distinct timestamps, convert to date string, and filter
-    const rawData = await this.vitalSignRepository
+    // Dedupe to calendar dates in SQL instead of loading every row and
+    // deduping in JS. to_timestamp(ms / 1000.0) AT TIME ZONE 'UTC' + to_char
+    // reproduces the previous `new Date(ts).toISOString().split('T')[0]`
+    // output exactly: UTC 'YYYY-MM-DD' strings, most recent date first.
+    const rows: { date: string }[] = await this.vitalSignRepository
       .createQueryBuilder('vital')
-      .select('vital.timestamp', 'timestamp')
+      .select(
+        "DISTINCT to_char(to_timestamp(CAST(vital.timestamp AS BIGINT) / 1000.0) AT TIME ZONE 'UTC', 'YYYY-MM-DD')",
+        'date',
+      )
       .where('vital.userId = :userId', { userId })
-      .orderBy('vital.timestamp', 'DESC')
+      .orderBy('date', 'DESC')
       .getRawMany();
 
-    // Set to store unique dates (YYYY-MM-DD)
-    const dates = new Set<string>();
-
-    rawData.forEach(row => {
-      // Timestamp is stored as BigInt string or string, convert to number/Date
-      // If timestamp is purely numeric string
-      const ts = Number(row.timestamp);
-      if (!isNaN(ts)) {
-        const date = new Date(ts).toISOString().split('T')[0];
-        dates.add(date);
-      }
-    });
-
-    return Array.from(dates);
+    return rows.map((row) => row.date);
   }
 
   async getLogsByDateRange(userId: number, startDate: string, endDate: string): Promise<VitalSign[]> {
@@ -98,7 +97,7 @@ export class HealthServiceService {
       throw new Error('Invalid startDate or endDate');
     }
 
-    return this.vitalSignRepository
+    const logs = await this.vitalSignRepository
       .createQueryBuilder('vital')
       // timestamp is a bigint stored as string — bind epoch-ms as strings so the
       // comparison stays numeric/consistent with the stored representation.
@@ -106,6 +105,15 @@ export class HealthServiceService {
       .andWhere('vital.timestamp >= :startDate', { startDate: start.toString() })
       .andWhere('vital.timestamp <= :endDate', { endDate: end.toString() })
       .orderBy('vital.timestamp', 'ASC')
+      .take(MAX_RANGE_ROWS)
       .getMany();
+
+    if (logs.length === MAX_RANGE_ROWS) {
+      this.logger.warn(
+        `getLogsByDateRange likely truncated at the ${MAX_RANGE_ROWS}-row cap for user ${userId} (${startDate} → ${endDate})`,
+      );
+    }
+
+    return logs;
   }
 }

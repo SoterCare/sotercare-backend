@@ -10,8 +10,16 @@ import { ResponseInterceptor } from './common/interceptors/response.interceptor'
 
 async function bootstrap() {
   const app = await NestFactory.create(ApiGatewayModule);
-  app.use(json({ limit: '50mb' }));
-  app.use(urlencoded({ extended: true, limit: '50mb' }));
+  // Large payloads are only expected on the ingestion routes (mobile/raspberry
+  // log sync). Mount the big parsers for those paths first — body-parser skips
+  // requests whose body is already parsed — and keep a small default everywhere
+  // else so oversized bodies can't tie up the gateway.
+  app.use('/logs', json({ limit: '25mb' }));
+  app.use('/logs', urlencoded({ extended: true, limit: '25mb' }));
+  app.use('/sync', json({ limit: '25mb' }));
+  app.use('/sync', urlencoded({ extended: true, limit: '25mb' }));
+  app.use(json({ limit: '1mb' }));
+  app.use(urlencoded({ extended: true, limit: '1mb' }));
   app.use(compression());
 
   // H4: enable CORS (configurable via CORS_ORIGIN, comma-separated; defaults to

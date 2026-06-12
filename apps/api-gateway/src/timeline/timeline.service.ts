@@ -9,6 +9,9 @@ import { QueryTimelineStatsDto } from './dto/query-stats.dto';
 import { QueryTimelineVitalsDto } from './dto/query-vitals.dto';
 import { RestoreTimelineItemDto } from './dto/restore-item.dto';
 
+// Bound list endpoints — these previously returned every matching row.
+const TIMELINE_MAX_EVENTS = 500;
+
 @Injectable()
 export class TimelineService {
   constructor(
@@ -22,20 +25,23 @@ export class TimelineService {
 
   async getVitalsTimeline(userId: number, query: QueryTimelineVitalsDto) {
     await this.ensureDeviceOwnership(userId, query.deviceId);
-    const { start, end } = this.getRange(query.period, query.date, undefined, query.startDate, query.endDate);
+    const { start, end } = this.getRange(
+      query.period,
+      query.date,
+      undefined,
+      query.startDate,
+      query.endDate,
+    );
 
-    const vitals = await this.vitalRepository.find({
-      where: {
-        deviceId: query.deviceId,
-        timestamp: Between(start, end),
-      },
-      order: { timestamp: 'ASC' },
-    });
+    // Aggregate in SQL (GROUP BY time bucket + AVG/COUNT) instead of loading
+    // every raw row into JS — a month of 1Hz data is ~2.6M rows otherwise.
+    const bucketUnit = query.period === 'day' ? 'hour' : 'day';
+    const buckets = await this.queryVitalBuckets(query, start, end, bucketUnit);
 
     const points =
       query.period === 'day'
-        ? this.aggregateDailyVitals(vitals, query.metric)
-        : this.aggregateMultiDayVitals(vitals, query.metric, start, end);
+        ? this.mapHourlyBuckets(buckets)
+        : this.mapDailyBuckets(buckets, start, end);
 
     return {
       metric: query.metric,
@@ -45,9 +51,104 @@ export class TimelineService {
     };
   }
 
+  private async queryVitalBuckets(
+    query: QueryTimelineVitalsDto,
+    start: Date,
+    end: Date,
+    unit: 'hour' | 'day',
+  ): Promise<{ bucket: Date | string; value: string | number | null }[]> {
+    const bucketExpr = `date_trunc('${unit}', v.timestamp)`;
+    const qb = this.vitalRepository
+      .createQueryBuilder('v')
+      .select(bucketExpr, 'bucket')
+      .where('v."deviceId" = :deviceId', { deviceId: query.deviceId })
+      .andWhere('v.timestamp BETWEEN :start AND :end', { start, end })
+      .groupBy(bucketExpr)
+      .orderBy('bucket', 'ASC');
+
+    // gait is a count of valid entries per bucket; the rest average the metric.
+    if (query.metric === 'gait') {
+      qb.addSelect('COUNT(*)', 'value').andWhere(
+        `v."gaitAnalysis" IS NOT NULL AND v."gaitAnalysis" != 'N/A'`,
+      );
+    } else {
+      const column = {
+        temp: 'v.temperature',
+        roomTemp: 'v."roomTemperature"',
+        moisture: 'v.moisture',
+      }[query.metric];
+      qb.addSelect(`AVG(${column})`, 'value').andWhere(`${column} IS NOT NULL`);
+    }
+
+    return qb.getRawMany();
+  }
+
+  /** Day view: 24 hourly slots, null where the hour has no data. */
+  private mapHourlyBuckets(
+    buckets: { bucket: Date | string; value: string | number | null }[],
+  ) {
+    const byHour = new Map<number, number>();
+    for (const row of buckets) {
+      const date = new Date(row.bucket);
+      byHour.set(date.getUTCHours(), this.roundBucketValue(row.value));
+    }
+
+    return Array.from({ length: 24 }, (_, hour) => ({
+      xLabel: `${String(hour).padStart(2, '0')}:00`,
+      value: byHour.get(hour) ?? null,
+    }));
+  }
+
+  /** Multi-day view: one point per day, trimmed of leading/trailing empty days. */
+  private mapDailyBuckets(
+    buckets: { bucket: Date | string; value: string | number | null }[],
+    start: Date,
+    end: Date,
+  ) {
+    const byDay = new Map<string, number>();
+    for (const row of buckets) {
+      byDay.set(
+        this.toDateKey(new Date(row.bucket)),
+        this.roundBucketValue(row.value),
+      );
+    }
+
+    const result: { xLabel: string; value: number | null }[] = [];
+    const cursor = new Date(
+      Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()),
+    );
+    while (cursor <= end) {
+      const key = this.toDateKey(cursor);
+      result.push({ xLabel: key, value: byDay.get(key) ?? null });
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+
+    let firstIndex = -1;
+    let lastIndex = -1;
+    for (let i = 0; i < result.length; i++) {
+      if (result[i].value !== null) {
+        if (firstIndex === -1) firstIndex = i;
+        lastIndex = i;
+      }
+    }
+
+    return firstIndex !== -1 ? result.slice(firstIndex, lastIndex + 1) : result;
+  }
+
+  private roundBucketValue(value: string | number | null): number {
+    // pg returns AVG/COUNT as strings; tests may mock numbers.
+    return Number(Number(value ?? 0).toFixed(2));
+  }
+
   async getEvents(userId: number, query: QueryTimelineEventsDto) {
     await this.ensureDeviceOwnership(userId, query.deviceId);
-    const { start, end } = this.getRange(query.period, query.date, undefined, query.startDate, query.endDate);
+    const { start, end } = this.getRange(
+      query.period,
+      query.date,
+      undefined,
+      query.startDate,
+      query.endDate,
+    );
 
     const where: FindOptionsWhere<Alert> = {
       deviceId: query.deviceId,
@@ -62,6 +163,7 @@ export class TimelineService {
     const alerts = await this.alertRepository.find({
       where,
       order: { timestamp: 'DESC' },
+      take: TIMELINE_MAX_EVENTS,
     });
 
     return {
@@ -82,69 +184,71 @@ export class TimelineService {
       query.date ?? `${query.month}-01`,
       query.month,
       query.startDate,
-      query.endDate
+      query.endDate,
     );
 
-    const alerts = await this.alertRepository.find({
-      where: {
-        deviceId: query.deviceId,
-        timestamp: Between(start, end),
-      },
-    });
+    // COUNT per type in SQL — one row per alert type instead of every alert row.
+    const rows: { type: AlertType; count: string }[] =
+      await this.alertRepository
+        .createQueryBuilder('a')
+        .select('a.type', 'type')
+        .addSelect('COUNT(*)', 'count')
+        .where('a."deviceId" = :deviceId', { deviceId: query.deviceId })
+        .andWhere('a.timestamp BETWEEN :start AND :end', { start, end })
+        .groupBy('a.type')
+        .getRawMany();
 
-    const counts = alerts.reduce(
-      (accumulator, alert) => {
-        switch (alert.type) {
-          case AlertType.MOVEMENT:
-            accumulator.movements += 1;
-            break;
-          case AlertType.FALL:
-            accumulator.falls += 1;
-            break;
-          case AlertType.URINE:
-            accumulator.urine += 1;
-            break;
-          case AlertType.TEMPERATURE:
-            accumulator.temperature += 1;
-            break;
-          case AlertType.MOISTURE:
-            accumulator.moisture += 1;
-            break;
-          case AlertType.HELP_CALL:
-            accumulator.helpCalls += 1;
-            break;
-        }
-        return accumulator;
-      },
-      { movements: 0, falls: 0, urine: 0, temperature: 0, moisture: 0, helpCalls: 0 },
-    );
+    const counts = {
+      movements: 0,
+      falls: 0,
+      urine: 0,
+      temperature: 0,
+      moisture: 0,
+      helpCalls: 0,
+    };
+
+    for (const row of rows) {
+      switch (row.type) {
+        case AlertType.MOVEMENT:
+          counts.movements = Number(row.count);
+          break;
+        case AlertType.FALL:
+          counts.falls = Number(row.count);
+          break;
+        case AlertType.URINE:
+          counts.urine = Number(row.count);
+          break;
+        case AlertType.TEMPERATURE:
+          counts.temperature = Number(row.count);
+          break;
+        case AlertType.MOISTURE:
+          counts.moisture = Number(row.count);
+          break;
+        case AlertType.HELP_CALL:
+          counts.helpCalls = Number(row.count);
+          break;
+      }
+    }
 
     return counts;
   }
 
   async getDateOptions(userId: number, query: QueryDateOptionsDto) {
     await this.ensureDeviceOwnership(userId, query.deviceId);
-    const vitals = await this.vitalRepository.find({
-      where: { deviceId: query.deviceId },
-      order: { timestamp: 'DESC' },
-      select: { timestamp: true },
-    });
 
-    const options = Array.from(
-      new Set(
-        vitals.map((vital) => {
-          const year = vital.timestamp.getUTCFullYear();
-          const month = String(vital.timestamp.getUTCMonth() + 1).padStart(
-            2,
-            '0',
-          );
-          const day = String(vital.timestamp.getUTCDate()).padStart(2, '0');
-          return `${year}/${month}/${day}`;
-        }),
-      ),
-    );
+    // Dedupe to calendar days in SQL — previously this loaded every vital row
+    // ever stored for the device just to derive the distinct dates.
+    const rows: { date: string }[] = await this.vitalRepository
+      .createQueryBuilder('v')
+      .select(
+        `DISTINCT to_char(v.timestamp AT TIME ZONE 'UTC', 'YYYY/MM/DD')`,
+        'date',
+      )
+      .where('v."deviceId" = :deviceId', { deviceId: query.deviceId })
+      .orderBy('date', 'DESC')
+      .getRawMany();
 
-    return { options };
+    return { options: rows.map((row) => row.date) };
   }
 
   async getDismissed(userId: number) {
@@ -161,6 +265,7 @@ export class TimelineService {
         isDismissed: true,
       },
       order: { dismissedAt: 'DESC' },
+      take: TIMELINE_MAX_EVENTS,
     });
 
     return {
@@ -189,106 +294,6 @@ export class TimelineService {
     await this.alertRepository.save(alert);
 
     return { dismissedId: body.id };
-  }
-
-  private aggregateDailyVitals(
-    vitals: Vital[],
-    metric: QueryTimelineVitalsDto['metric'],
-  ) {
-    // Return individual data points with actual HH:mm timestamps
-    // so short time-frame data is rendered at full resolution.
-    const points: { xLabel: string; value: number | null }[] = [];
-
-    for (const vital of vitals) {
-      const val = this.resolveMetricValue(vital, metric);
-      if (val === null) continue;
-
-      const hours = String(vital.timestamp.getUTCHours()).padStart(2, '0');
-      const minutes = String(vital.timestamp.getUTCMinutes()).padStart(2, '0');
-
-      points.push({
-        xLabel: `${hours}:${minutes}`,
-        value: val,
-      });
-    }
-
-    return points;
-  }
-
-  private aggregateMultiDayVitals(
-    vitals: Vital[],
-    metric: QueryTimelineVitalsDto['metric'],
-    start: Date,
-    end: Date,
-  ) {
-    const days = new Map<string, number[]>();
-    const cursor = new Date(
-      Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()),
-    );
-
-    while (cursor <= end) {
-      days.set(this.toDateKey(cursor), []);
-      cursor.setUTCDate(cursor.getUTCDate() + 1);
-    }
-
-    for (const vital of vitals) {
-      const key = this.toDateKey(vital.timestamp);
-      const val = this.resolveMetricValue(vital, metric);
-      if (val !== null) {
-        days.get(key)?.push(val);
-      }
-    }
-
-    const result = Array.from(days.entries()).map(([day, values]) => ({
-      xLabel: day,
-      value: this.averageValues(values, metric),
-    }));
-
-    let firstIndex = -1;
-    let lastIndex = -1;
-    for (let i = 0; i < result.length; i++) {
-        if (result[i].value !== null) {
-            if (firstIndex === -1) firstIndex = i;
-            lastIndex = i;
-        }
-    }
-
-    if (firstIndex !== -1) {
-        return result.slice(firstIndex, lastIndex + 1);
-    }
-    return result;
-  }
-
-  private resolveMetricValue(
-    vital: Vital,
-    metric: QueryTimelineVitalsDto['metric'],
-  ): number | null {
-    switch (metric) {
-      case 'temp':
-        return vital.temperature ?? null;
-      case 'roomTemp':
-        return vital.roomTemperature ?? null;
-      case 'moisture':
-        return vital.moisture ?? null;
-      case 'gait':
-        return vital.gaitAnalysis && vital.gaitAnalysis !== 'N/A' ? 1 : null;
-    }
-  }
-
-  private averageValues(
-    values: number[],
-    metric: QueryTimelineVitalsDto['metric'],
-  ) {
-    if (values.length === 0) {
-      return null;
-    }
-
-    if (metric === 'gait') {
-      return values.reduce((sum, value) => sum + value, 0);
-    }
-
-    const total = values.reduce((sum, value) => sum + value, 0);
-    return Number((total / values.length).toFixed(2));
   }
 
   private getYAxisMeta(metric: QueryTimelineVitalsDto['metric']) {
@@ -338,7 +343,9 @@ export class TimelineService {
     }
 
     if (period === 'month') {
-      const monthValue = month ?? (date ? date.slice(0, 7) : new Date().toISOString().slice(0, 7));
+      const monthValue =
+        month ??
+        (date ? date.slice(0, 7) : new Date().toISOString().slice(0, 7));
       const [year, monthNumber] = monthValue.split('-').map(Number);
       const start = new Date(Date.UTC(year, monthNumber - 1, 1));
       const end = new Date(Date.UTC(year, monthNumber, 0, 23, 59, 59, 999));

@@ -2,9 +2,10 @@ import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import {
   Alert,
   Device,
@@ -17,6 +18,8 @@ import { SyncBatchDto } from './dto/sync-batch.dto';
 
 @Injectable()
 export class SyncService {
+  private readonly logger = new Logger(SyncService.name);
+
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     @InjectRepository(SyncHistory)
@@ -51,137 +54,129 @@ export class SyncService {
     }
 
     try {
-      const upserted = await this.dataSource.transaction(async (manager) => {
-        const deviceRepository = manager.getRepository(Device);
-        const statusRepository = manager.getRepository(DeviceStatus);
-        const vitalRepository = manager.getRepository(Vital);
-        const alertRepository = manager.getRepository(Alert);
-        const recordingRepository = manager.getRepository(RecordingSession);
-        const historyRepository = manager.getRepository(SyncHistory);
-
-        let devices = 0;
-        let statuses = 0;
-        let vitals = 0;
-        let alerts = 0;
-        let recordings = 0;
-
-        for (const device of payload.devices ?? []) {
-          await deviceRepository.save(
-            deviceRepository.create({
-              id: device.id,
-              userId,
-              name: device.name,
-              type: device.type,
-              lastSeenAt: syncedAt,
-              lastSyncSlot: payload.slot,
-              syncSource: 'mobile_sync',
-            }),
-          );
-          devices += 1;
-        }
-
-        for (const status of payload.deviceStatuses ?? []) {
-          await statusRepository.save(
-            statusRepository.create({
-              deviceId: status.deviceId,
-              battery: status.battery ?? null,
-              signalRssi: status.signalRssi ?? null,
-              connectedAt: status.connectedAt
-                ? new Date(status.connectedAt)
-                : null,
-              bands: status.bands ?? [],
-              receivedAt,
-            }),
-          );
-          statuses += 1;
-        }
-
-        for (const vital of payload.latestVitals ?? []) {
-          const vitalTimestamp = new Date(vital.timestamp);
-          const existingVital = await vitalRepository.findOne({
-            where: { deviceId: vital.deviceId, timestamp: vitalTimestamp },
-          });
-
-          if (existingVital) {
-            continue;
+      // Each entity group is written with ONE bulk statement instead of
+      // per-row findOne/save round-trips (a 100-vital + 20-alert batch used
+      // to issue ~260 sequential queries inside this transaction).
+      const upserted = await this.dataSource.transaction(
+        async (manager: EntityManager) => {
+          const deviceRows = (payload.devices ?? []).map((device) => ({
+            id: device.id,
+            userId,
+            name: device.name,
+            type: device.type,
+            lastSeenAt: syncedAt,
+            lastSyncSlot: payload.slot,
+            syncSource: 'mobile_sync',
+          }));
+          if (deviceRows.length > 0) {
+            // Insert-or-update on id, overwriting the same fields the old
+            // per-row save() wrote (userId/name/type/lastSeenAt/lastSyncSlot/
+            // syncSource).
+            await manager.upsert(Device, deviceRows, ['id']);
           }
 
-          await vitalRepository.save(
-            vitalRepository.create({
-              deviceId: vital.deviceId,
-              timestamp: vitalTimestamp,
-              temperature: vital.temperature ?? null,
-              roomTemperature: vital.roomTemperature ?? null,
-              moisture: vital.moisture ?? null,
-              gaitAnalysis: vital.gaitAnalysis ?? null,
-              thighnodeStatus: vital.thighnodeStatus ?? null,
-              syncSlot: payload.slot,
-            }),
-          );
-          vitals += 1;
-        }
-
-        for (const alert of payload.recentAlerts ?? []) {
-          const existingAlert = await alertRepository.findOne({
-            where: { id: alert.id },
-          });
-
-          const incomingTimestamp = new Date(alert.timestamp);
-          if (
-            existingAlert &&
-            existingAlert.deviceId === alert.deviceId &&
-            existingAlert.type === alert.type &&
-            existingAlert.title === alert.title &&
-            existingAlert.timestamp.getTime() === incomingTimestamp.getTime() &&
-            existingAlert.syncSlot === payload.slot
-          ) {
-            continue;
+          const statusRows = (payload.deviceStatuses ?? []).map((status) => ({
+            deviceId: status.deviceId,
+            battery: status.battery ?? null,
+            signalRssi: status.signalRssi ?? null,
+            connectedAt: status.connectedAt
+              ? new Date(status.connectedAt)
+              : null,
+            bands: status.bands ?? [],
+            receivedAt,
+          }));
+          if (statusRows.length > 0) {
+            // Append-only table: plain bulk insert.
+            await manager.insert(DeviceStatus, statusRows);
           }
 
-          await alertRepository.save(
-            alertRepository.create({
-              id: alert.id,
-              deviceId: alert.deviceId,
-              type: alert.type,
-              title: alert.title,
-              timestamp: incomingTimestamp,
-              syncSlot: payload.slot,
-              isDismissed: existingAlert?.isDismissed ?? false,
-              dismissedAt: existingAlert?.dismissedAt ?? null,
-            }),
-          );
-          alerts += 1;
-        }
-
-        for (const session of payload.recordingSessions ?? []) {
-          const existingSession = await recordingRepository.findOne({
-            where: { recordingId: session.recordingId },
-          });
-          const createdAt = new Date(session.createdAt);
-
-          if (
-            existingSession &&
-            existingSession.deviceId === session.deviceId &&
-            existingSession.createdAt.getTime() === createdAt.getTime() &&
-            existingSession.syncedAt.getTime() === syncedAt.getTime()
-          ) {
-            continue;
+          const vitalRows = (payload.latestVitals ?? []).map((vital) => ({
+            deviceId: vital.deviceId,
+            timestamp: new Date(vital.timestamp),
+            temperature: vital.temperature ?? null,
+            roomTemperature: vital.roomTemperature ?? null,
+            moisture: vital.moisture ?? null,
+            gaitAnalysis: vital.gaitAnalysis ?? null,
+            thighnodeStatus: vital.thighnodeStatus ?? null,
+            syncSlot: payload.slot,
+          }));
+          let vitals = 0;
+          if (vitalRows.length > 0) {
+            // The unique (deviceId,timestamp) index dedupes via ON CONFLICT
+            // DO NOTHING; RETURNING reports only the rows actually inserted,
+            // so the count keeps the old "new rows only" semantics.
+            const vitalResult = await manager
+              .createQueryBuilder()
+              .insert()
+              .into(Vital)
+              .values(vitalRows)
+              .orIgnore()
+              .returning(['id'])
+              .updateEntity(false)
+              .execute();
+            vitals = Array.isArray(vitalResult.raw)
+              ? vitalResult.raw.length
+              : vitalRows.length;
           }
 
-          await recordingRepository.save(
-            recordingRepository.create({
+          const alertRows = (payload.recentAlerts ?? []).map((alert) => ({
+            id: alert.id,
+            deviceId: alert.deviceId,
+            type: alert.type,
+            title: alert.title,
+            timestamp: new Date(alert.timestamp),
+            syncSlot: payload.slot,
+            isDismissed: false,
+            dismissedAt: null,
+          }));
+          let alerts = 0;
+          if (alertRows.length > 0) {
+            // Alert ids are deterministic, so an existing id is the same
+            // alert: insert-or-ignore on the PK leaves stored rows (and their
+            // dismissal state) untouched. Count-semantics note: re-synced
+            // alerts whose fields changed are no longer updated nor counted
+            // (the old per-row loop updated and counted them).
+            const alertResult = await manager
+              .createQueryBuilder()
+              .insert()
+              .into(Alert)
+              .values(alertRows)
+              .orIgnore()
+              .returning(['id'])
+              .updateEntity(false)
+              .execute();
+            alerts = Array.isArray(alertResult.raw)
+              ? alertResult.raw.length
+              : alertRows.length;
+          }
+
+          const recordingRows = (payload.recordingSessions ?? []).map(
+            (session) => ({
               recordingId: session.recordingId,
               deviceId: session.deviceId,
-              createdAt,
+              createdAt: new Date(session.createdAt),
               syncedAt,
             }),
           );
-          recordings += 1;
-        }
+          if (recordingRows.length > 0) {
+            // Insert-or-update on the PK, overwriting deviceId/createdAt/
+            // syncedAt like the old save(). Count-semantics note: every row
+            // in the batch is counted, whereas the old loop skipped rows that
+            // were byte-identical to the stored session.
+            await manager.upsert(RecordingSession, recordingRows, [
+              'recordingId',
+            ]);
+          }
 
-        const upsertSummary = { devices, statuses, vitals, alerts, recordings };
-        await historyRepository.save(
-          historyRepository.create({
+          const upsertSummary = {
+            devices: deviceRows.length,
+            statuses: statusRows.length,
+            vitals,
+            alerts,
+            recordings: recordingRows.length,
+          };
+
+          await manager.insert(SyncHistory, {
             userId,
             source: payload.source,
             slot: payload.slot,
@@ -190,19 +185,25 @@ export class SyncService {
             receivedAt,
             upsertSummary,
             idempotencyKey,
-          }),
-        );
+          });
 
-        return upsertSummary;
-      });
+          return upsertSummary;
+        },
+      );
 
       return {
         success: true,
         receivedAt: receivedAt.toISOString(),
         upserted,
       };
-    } catch {
-      throw new InternalServerErrorException('Failed to process sync batch');
+    } catch (error) {
+      this.logger.error(
+        'Failed to process sync batch',
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw new InternalServerErrorException('Failed to process sync batch', {
+        cause: error,
+      });
     }
   }
 }

@@ -24,7 +24,7 @@ import {
   ApiBearerAuth,
   ApiQuery,
 } from '@nestjs/swagger';
-import { Observable, lastValueFrom } from 'rxjs';
+import { Observable, lastValueFrom, timeout } from 'rxjs';
 import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { IotDeviceService } from './iot-device/iot-device.service';
@@ -164,6 +164,10 @@ interface HealthService {
   getLogsByDateRange(data: unknown): Observable<unknown>;
 }
 
+// Deadlines so a stalled health-service can't hang device syncs or mobile reads.
+const SYNC_GRPC_TIMEOUT_MS = 10000;
+const READ_GRPC_TIMEOUT_MS = 15000;
+
 @ApiTags('health')
 @Controller('logs')
 @UseInterceptors(IdempotencyInterceptor)
@@ -233,7 +237,9 @@ export class HealthController implements OnModuleInit {
     this.logger.debug(`Syncing ${grpcLogs.length} logs for user ${userId}`);
 
     return lastValueFrom(
-      this.healthService.syncLogs({ user_id: userId, logs: grpcLogs }),
+      this.healthService
+        .syncLogs({ user_id: userId, logs: grpcLogs })
+        .pipe(timeout(SYNC_GRPC_TIMEOUT_MS)),
     );
   }
 
@@ -304,17 +310,28 @@ export class HealthController implements OnModuleInit {
       };
     });
 
-    const result = await lastValueFrom(
-      this.healthService.syncLogs({ user_id: ownerId, logs: grpcLogs }),
-    );
+    // The gRPC persist and the dashboard snapshot upsert are independent —
+    // run them in parallel instead of serially extending the device's wait.
+    const [result] = await Promise.all([
+      lastValueFrom(
+        this.healthService
+          .syncLogs({ user_id: ownerId, logs: grpcLogs })
+          .pipe(timeout(SYNC_GRPC_TIMEOUT_MS)),
+      ),
+      this.vitalSyncService.upsertLatestVital(deviceId, body.logs),
+    ]);
 
-    // Upsert latest vital snapshot to the dashboard vitals table
-    await this.vitalSyncService.upsertLatestVital(deviceId, body.logs);
-
+    // Emit a summary, not the full batch: a 1k-log backlog would otherwise be
+    // ~250KB stringified per connected socket on the event loop.
+    const latest = grpcLogs[grpcLogs.length - 1] ?? null;
     this.realtimeGateway.emitToUser(ownerId, 'device.logs.ingested', {
       device_id: deviceId,
       count: grpcLogs.length,
-      logs: grpcLogs,
+      latest,
+      time_range:
+        grpcLogs.length > 0
+          ? { from: grpcLogs[0].timestamp, to: latest!.timestamp }
+          : null,
       ingested_at: new Date().toISOString(),
     });
 
@@ -328,7 +345,11 @@ export class HealthController implements OnModuleInit {
   async getLogDates(@Req() req: AuthenticatedRequest) {
     const userId = req.user.userId;
     this.logger.debug(`Fetching log dates for user ${userId}`);
-    return lastValueFrom(this.healthService.getLogDates({ user_id: userId }));
+    return lastValueFrom(
+      this.healthService
+        .getLogDates({ user_id: userId })
+        .pipe(timeout(READ_GRPC_TIMEOUT_MS)),
+    );
   }
 
   @Get('range')
@@ -356,11 +377,13 @@ export class HealthController implements OnModuleInit {
 
     const userId = req.user.userId;
     return lastValueFrom(
-      this.healthService.getLogsByDateRange({
-        user_id: userId,
-        start_date: startDate,
-        end_date: endDate,
-      }),
+      this.healthService
+        .getLogsByDateRange({
+          user_id: userId,
+          start_date: startDate,
+          end_date: endDate,
+        })
+        .pipe(timeout(READ_GRPC_TIMEOUT_MS)),
     );
   }
 }

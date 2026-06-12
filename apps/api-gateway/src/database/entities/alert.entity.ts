@@ -27,6 +27,7 @@ export enum AlertType {
 // dismissed/attended flags — composite indexes serve those query shapes.
 @Index(['deviceId', 'timestamp'])
 @Index(['deviceId', 'isDismissed'])
+@Index(['deviceId', 'isAttended', 'timestamp'])
 export class Alert {
   @PrimaryColumn()
   id: string;

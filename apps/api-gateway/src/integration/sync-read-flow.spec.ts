@@ -99,6 +99,35 @@ class MemoryRepository<T extends Record<string, any>> {
 
     return results;
   }
+
+  // Supports DevicesService's latest-status-per-device DISTINCT ON query.
+  createQueryBuilder() {
+    const state: { deviceIds?: string[] } = {};
+    const qb: any = {
+      distinctOn: () => qb,
+      where: (_expr: string, params: { deviceIds: string[] }) => {
+        state.deviceIds = params.deviceIds;
+        return qb;
+      },
+      orderBy: () => qb,
+      addOrderBy: () => qb,
+      getMany: () => {
+        const latest = new Map<string, T>();
+        for (const item of this.items) {
+          if (!state.deviceIds?.includes(item.deviceId)) continue;
+          const current = latest.get(item.deviceId);
+          if (
+            !current ||
+            (item.receivedAt as Date) > (current.receivedAt as Date)
+          ) {
+            latest.set(item.deviceId, item);
+          }
+        }
+        return Promise.resolve([...latest.values()]);
+      },
+    };
+    return qb;
+  }
 }
 
 describe('Sync to read flow', () => {
@@ -119,11 +148,63 @@ describe('Sync to read flow', () => {
       ['SyncHistory', syncHistoryRepository],
     ]);
 
+    // Mirrors the EntityManager surface the bulk-write sync service uses:
+    // upsert / insert / insert-query-builder with ON CONFLICT DO NOTHING.
+    const manager = {
+      getRepository: (entity: any) => repositories.get(entity.name),
+      upsert: (entity: any, rows: any[]) => {
+        const repo = repositories.get(entity.name);
+        rows.forEach((row: any) => repo.save({ ...row }));
+        return Promise.resolve({});
+      },
+      insert: (entity: any, rowOrRows: any) => {
+        const repo = repositories.get(entity.name);
+        const rows = Array.isArray(rowOrRows) ? rowOrRows : [rowOrRows];
+        rows.forEach((row: any) => repo.save({ ...row }));
+        return Promise.resolve({});
+      },
+      createQueryBuilder: () => {
+        const state: { entity?: any; rows?: any[] } = {};
+        const qb: any = {
+          insert: () => qb,
+          into: (entity: any) => {
+            state.entity = entity;
+            return qb;
+          },
+          values: (rows: any[]) => {
+            state.rows = rows;
+            return qb;
+          },
+          orIgnore: () => qb,
+          returning: () => qb,
+          updateEntity: () => qb,
+          execute: () => {
+            const repo = repositories.get(state.entity.name);
+            const inserted: any[] = [];
+            for (const row of state.rows ?? []) {
+              const conflict =
+                state.entity.name === 'Vital'
+                  ? repo.findOne({
+                      where: {
+                        deviceId: row.deviceId,
+                        timestamp: row.timestamp,
+                      },
+                    })
+                  : repo.findOne({ where: { id: row.id } });
+              if (!conflict) {
+                const saved = repo.save({ ...row });
+                inserted.push({ id: saved.id ?? null });
+              }
+            }
+            return Promise.resolve({ raw: inserted });
+          },
+        };
+        return qb;
+      },
+    };
+
     const dataSource = {
-      transaction: (callback: any) =>
-        callback({
-          getRepository: (entity: any) => repositories.get(entity.name),
-        }),
+      transaction: (callback: any) => callback(manager),
     };
 
     const syncService = new SyncService(
@@ -140,7 +221,7 @@ describe('Sync to read flow', () => {
       vitalRepository as any,
     );
 
-    await syncService.processRaspberryPiSync(1, {
+    const result = await syncService.processRaspberryPiSync(1, {
       source: 'raspberry_pi_gateway',
       syncedAt: '2026-03-12T08:00:02.000Z',
       slot: 'slot_08',
@@ -169,6 +250,14 @@ describe('Sync to read flow', () => {
       ],
       recentAlerts: [],
       recordingSessions: [],
+    });
+
+    expect(result.upserted).toEqual({
+      devices: 1,
+      statuses: 1,
+      vitals: 1,
+      alerts: 0,
+      recordings: 0,
     });
 
     const devices = await devicesService.getDevices(1, true);

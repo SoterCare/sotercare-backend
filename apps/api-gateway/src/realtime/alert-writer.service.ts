@@ -22,8 +22,58 @@ const GAIT_MOVEMENT_LABELS = new Set(['standing up', 'sitting down']);
 @Injectable()
 export class AlertWriterService {
   /**
-   * Derives all alert candidates for a single log entry and persists any
-   * that are not yet in the database.  Returns the count of new alerts saved.
+   * Derives all alert candidates for a batch of log entries and persists them
+   * in a single batched insert. The deterministic alert ids plus
+   * ON CONFLICT DO NOTHING make this idempotent without any pre-SELECT.
+   * Returns the candidate alerts (some may have already existed in the
+   * database — callers tolerate re-emitting those).
+   */
+  async writeAlertsForLogs(
+    deviceId: string,
+    logs: NormalizedLog[],
+    syncSlot: string,
+    alertRepo: Repository<Alert>,
+  ): Promise<Alert[]> {
+    // Keyed by id so repeated readings within one batch collapse to one row.
+    const rowsById = new Map<string, Alert>();
+
+    for (const log of logs) {
+      const ts = new Date(log.timestamp);
+      for (const { idPrefix, type, title } of this.deriveCandidates(log)) {
+        const alertId = `${idPrefix}_${deviceId}_${log.timestamp}`;
+        rowsById.set(
+          alertId,
+          alertRepo.create({
+            id: alertId,
+            deviceId,
+            type,
+            title,
+            timestamp: ts,
+            isDismissed: false,
+            dismissedAt: null,
+            syncSlot,
+          }),
+        );
+      }
+    }
+
+    const rows = [...rowsById.values()];
+    if (rows.length === 0) return rows;
+
+    await alertRepo
+      .createQueryBuilder()
+      .insert()
+      .values(rows)
+      .orIgnore()
+      .execute();
+
+    return rows;
+  }
+
+  /**
+   * Backward-compatible single-log entry point, implemented via the batched
+   * path. Returns the count of candidate alerts written (may include alerts
+   * that already existed, since the dedupe now happens in the database).
    */
   async writeAlertsForLog(
     deviceId: string,
@@ -31,31 +81,13 @@ export class AlertWriterService {
     syncSlot: string,
     alertRepo: Repository<Alert>,
   ): Promise<number> {
-    const candidates = this.deriveCandidates(log);
-    const ts = new Date(log.timestamp);
-    let saved = 0;
-
-    for (const { idPrefix, type, title } of candidates) {
-      const alertId = `${idPrefix}_${deviceId}_${log.timestamp}`;
-      const existing = await alertRepo.findOne({ where: { id: alertId } });
-      if (existing) continue;
-
-      await alertRepo.save(
-        alertRepo.create({
-          id: alertId,
-          deviceId,
-          type,
-          title,
-          timestamp: ts,
-          isDismissed: false,
-          dismissedAt: null,
-          syncSlot,
-        }),
-      );
-      saved += 1;
-    }
-
-    return saved;
+    const written = await this.writeAlertsForLogs(
+      deviceId,
+      [log],
+      syncSlot,
+      alertRepo,
+    );
+    return written.length;
   }
 
   // ─── Rule Engine ─────────────────────────────────────────────────────────────

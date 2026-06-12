@@ -13,20 +13,21 @@ export class DashboardService {
   ) {}
 
   async getLatestVitals(userId: number, deviceId: string) {
-    const device = await this.deviceRepository.findOne({
-      where: { id: deviceId, userId },
-    });
+    // The ownership check and the latest-vital read are independent — run them
+    // in parallel and validate ownership before using the vital.
+    const [device, latestVital] = await Promise.all([
+      this.deviceRepository.findOne({ where: { id: deviceId, userId } }),
+      this.vitalRepository.findOne({
+        where: { deviceId },
+        order: { timestamp: 'DESC' },
+      }),
+    ]);
 
     if (!device) {
       throw new NotFoundException(
         'Device not found or does not belong to user',
       );
     }
-
-    const latestVital = await this.vitalRepository.findOne({
-      where: { deviceId },
-      order: { timestamp: 'DESC' },
-    });
 
     if (!latestVital) {
       return null;

@@ -1,7 +1,15 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  Index,
+} from 'typeorm';
 
 @Entity({ name: 'summary_history' })
 @Index(['userId', 'windowStart'])
+// The on-demand daily-cache lookup filters by userId + createdAt range.
+@Index(['userId', 'createdAt'])
 export class SummaryHistory {
   @PrimaryGeneratedColumn()
   id: number;

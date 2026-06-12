@@ -52,6 +52,11 @@ export class VitalSign {
   @Column({ type: 'int', nullable: true })
   spo2: number | null;
 
+  // Standalone index for timestamp-only range scans: the AI-summary safety
+  // guard polls `WHERE timestamp > x` every 10s with no userId filter, which
+  // the composite (userId, timestamp) index cannot serve — without this it
+  // degraded to a full-table seq scan on every poll.
+  @Index()
   @Column({ type: 'bigint' })
   timestamp: string; // Storing as string to handle BigInt safely
 

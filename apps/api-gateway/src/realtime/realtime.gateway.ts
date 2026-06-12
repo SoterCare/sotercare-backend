@@ -12,7 +12,7 @@ import {
 import { HttpException, Inject, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { ClientGrpc } from '@nestjs/microservices';
-import { lastValueFrom, type Observable } from 'rxjs';
+import { lastValueFrom, timeout, type Observable } from 'rxjs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Server, Socket } from 'socket.io';
@@ -20,7 +20,6 @@ import { Alert, Vital } from '../database/entities';
 import { IotDeviceService } from '../iot-device/iot-device.service';
 import { SyncBatchDto } from '../sync/dto/sync-batch.dto';
 import { SyncService } from '../sync/sync.service';
-import { VitalSyncService } from './vital-sync.service';
 import { AlertWriterService } from './alert-writer.service';
 
 interface HealthService {
@@ -36,6 +35,10 @@ type RealtimeSocketData = {
   deviceId?: string;
   ownerId?: number;
 };
+
+// Cap how long we'll wait on the health-service so a hung gRPC dependency
+// can't stall the socket handler indefinitely.
+const SYNC_LOGS_TIMEOUT_MS = 10000;
 
 type NormalizedGrpcLog = {
   id: number;
@@ -77,7 +80,6 @@ export class RealtimeGateway
     @Inject('HEALTH_SERVICE') private readonly healthClient: ClientGrpc,
     private readonly jwtService: JwtService,
     private readonly iotDeviceService: IotDeviceService,
-    private readonly vitalSyncService: VitalSyncService,
     private readonly syncService: SyncService,
     private readonly alertWriterService: AlertWriterService,
     @InjectRepository(Vital)
@@ -321,21 +323,23 @@ export class RealtimeGateway
           synced_count: 0,
         }
       : await lastValueFrom(
-          this.healthService.syncLogs({ user_id: ownerId, logs: grpcLogs }),
+          this.healthService
+            .syncLogs({ user_id: ownerId, logs: grpcLogs })
+            .pipe(timeout(SYNC_LOGS_TIMEOUT_MS)),
         );
 
-    // Write vitals directly to the timeline table (bypass sync_history transaction)
-    for (const log of grpcLogs) {
-      try {
-        const ts = new Date(log.timestamp);
-        const existing = await this.vitalRepository.findOne({
-          where: { deviceId, timestamp: ts },
-        });
-        if (!existing) {
-          await this.vitalRepository.save(
+    // Write vitals directly to the timeline table (bypass sync_history
+    // transaction) in one batched insert. ON CONFLICT DO NOTHING against the
+    // unique (deviceId, timestamp) index replaces the per-row findOne dedupe.
+    try {
+      await this.vitalRepository
+        .createQueryBuilder()
+        .insert()
+        .values(
+          grpcLogs.map((log) =>
             this.vitalRepository.create({
               deviceId,
-              timestamp: ts,
+              timestamp: new Date(log.timestamp),
               temperature: log.temperature ?? null,
               roomTemperature: log.ambient_temp ?? null,
               moisture: log.moisture != null ? Math.round(log.moisture) : null,
@@ -343,27 +347,37 @@ export class RealtimeGateway
               thighnodeStatus: log.thighnode_status || null,
               syncSlot: 'iot_live',
             }),
-          );
-        }
-        // Write all sensor-driven alerts via AlertWriterService
-        await this.alertWriterService.writeAlertsForLog(
-          deviceId,
-          log,
-          'iot_live',
-          this.alertRepository,
-        );
-      } catch (err) {
-        this.logger.warn(`Failed to save realtime vital to timeline for device ${deviceId}: ${err}`);
-      }
+          ),
+        )
+        .orIgnore()
+        .execute();
+    } catch (err) {
+      this.logger.warn(`Failed to save realtime vitals to timeline for device ${deviceId}: ${err}`);
     }
 
-    // Upsert latest vital snapshot to the dashboard vitals table
-    await this.vitalSyncService.upsertLatestVital(deviceId, grpcLogs);
+    // Write all sensor-driven alerts for the batch via one batched insert.
+    try {
+      await this.alertWriterService.writeAlertsForLogs(
+        deviceId,
+        grpcLogs,
+        'iot_live',
+        this.alertRepository,
+      );
+    } catch (err) {
+      this.logger.warn(`Failed to save realtime alerts for device ${deviceId}: ${err}`);
+    }
 
+    // Emit a summary instead of echoing the full log array back out — large
+    // batches were doubling the payload on the user-facing socket.
+    const timestamps = grpcLogs.map((log) => log.timestamp);
     this.emitToUser(ownerId, 'device.logs.ingested', {
       device_id: deviceId,
       count: grpcLogs.length,
-      logs: grpcLogs,
+      latest: grpcLogs[grpcLogs.length - 1],
+      time_range: {
+        from: Math.min(...timestamps),
+        to: Math.max(...timestamps),
+      },
       ingested_at: new Date().toISOString(),
     });
 

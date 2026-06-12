@@ -2,8 +2,12 @@ import { Body, Controller, Inject, OnModuleInit, Post, UseGuards } from '@nestjs
 import type { ClientGrpc } from '@nestjs/microservices'; // Correct import with type
 import { AuthThrottleGuard } from './common/guards/auth-throttle.guard';
 import type { Observable } from 'rxjs'; // import type
-import { lastValueFrom } from 'rxjs';
+import { lastValueFrom, timeout } from 'rxjs';
 import { ApiTags, ApiOperation, ApiBody, ApiProperty } from '@nestjs/swagger';
+
+// Cap how long we'll wait on the auth-service so a stalled dependency can't
+// hang auth requests indefinitely.
+const AUTH_GRPC_TIMEOUT_MS = 5000;
 
 class RegisterDto {
     @ApiProperty({ example: 'John Doe' })
@@ -53,28 +57,28 @@ export class AuthController implements OnModuleInit {
     @ApiOperation({ summary: 'Register a new user' })
     @ApiBody({ type: RegisterDto })
     async register(@Body() body: RegisterDto) {
-        return lastValueFrom(this.authService.registerUser(body));
+        return lastValueFrom(this.authService.registerUser(body).pipe(timeout(AUTH_GRPC_TIMEOUT_MS)));
     }
 
     @Post('verify')
     @ApiOperation({ summary: 'Verify registration OTP' })
     @ApiBody({ type: VerifyDto })
     async verify(@Body() body: VerifyDto) {
-        return lastValueFrom(this.authService.verifyRegistration(body));
+        return lastValueFrom(this.authService.verifyRegistration(body).pipe(timeout(AUTH_GRPC_TIMEOUT_MS)));
     }
 
     @Post('login')
     @ApiOperation({ summary: 'Initiate login' })
     @ApiBody({ type: LoginDto })
     async login(@Body() body: LoginDto) {
-        return lastValueFrom(this.authService.loginInit(body));
+        return lastValueFrom(this.authService.loginInit(body).pipe(timeout(AUTH_GRPC_TIMEOUT_MS)));
     }
 
     @Post('login-verify')
     @ApiOperation({ summary: 'Verify login OTP' })
     @ApiBody({ type: VerifyDto })
     async loginVerify(@Body() body: VerifyDto) {
-        return lastValueFrom(this.authService.loginVerify(body));
+        return lastValueFrom(this.authService.loginVerify(body).pipe(timeout(AUTH_GRPC_TIMEOUT_MS)));
     }
 
 

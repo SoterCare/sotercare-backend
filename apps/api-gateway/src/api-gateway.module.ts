@@ -22,6 +22,16 @@ import { IotDeviceModule } from './iot-device/iot-device.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { SummaryModule } from './summary/summary.module';
 
+// Keepalive pings keep the long-lived gRPC channels from silently dying behind
+// NATs/load balancers, so the first call after an idle period doesn't stall on
+// a dead connection.
+const GRPC_CHANNEL_OPTIONS = {
+  'grpc.keepalive_time_ms': 30000,
+  'grpc.keepalive_timeout_ms': 5000,
+  'grpc.http2.min_time_between_pings_ms': 10000,
+  'grpc.keepalive_permit_without_calls': 1,
+};
+
 // H2: never fall back to a public hard-coded secret. Fail fast at boot so a
 // missing JWT_SECRET can't silently make every token forgeable.
 function requireJwtSecret(): string {
@@ -59,6 +69,9 @@ function requireJwtSecret(): string {
                 database: configService.get<string>('DB_NAME', 'auth_db'),
               }),
           ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+          // Bound the pg pool and individual statements so one slow query
+          // can't monopolize the gateway's database access.
+          extra: { max: 20, statement_timeout: 10000 },
           autoLoadEntities: true,
           // C3: auto-schema-sync only outside production. In prod, schema is
           // managed by migrations so TypeORM can't drop/retype columns under us.
@@ -88,6 +101,7 @@ function requireJwtSecret(): string {
           url: process.env.AUTH_SERVICE_URL || 'localhost:50051',
           package: 'auth',
           protoPath: join(__dirname, '../../../libs/common/src/proto/auth.proto'),
+          channelOptions: GRPC_CHANNEL_OPTIONS,
         },
       },
       {
@@ -106,6 +120,7 @@ function requireJwtSecret(): string {
           // Set to 100 MB
           maxReceiveMessageLength: 100 * 1024 * 1024,
           maxSendMessageLength: 100 * 1024 * 1024,
+          channelOptions: GRPC_CHANNEL_OPTIONS,
         },
       },
     ]),

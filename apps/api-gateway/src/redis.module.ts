@@ -16,7 +16,14 @@ import { createClient } from 'redis';
                 const port = configService.get<number>('REDIS_PORT', 6379);
                 const url = redisUrl || `redis://${host}:${port}`;
 
-                const client = createClient({ url });
+                const client = createClient({
+                    url,
+                    // Fail fast when Redis is unreachable: bound the TCP connect
+                    // and reject commands immediately instead of queueing them
+                    // while disconnected (consumers fail-open on errors).
+                    socket: { connectTimeout: 2000 },
+                    disableOfflineQueue: true,
+                });
 
                 client.on('error', (err) => console.error('Redis Client Error', err));
                 await client.connect();
