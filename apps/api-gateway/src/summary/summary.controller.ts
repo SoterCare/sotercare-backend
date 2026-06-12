@@ -22,7 +22,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { SummaryService } from './summary.service';
 import { SummaryHistory } from './summary-history.entity';
 
-const DAILY_LIMIT = 5;
+const DAILY_LIMIT = parseInt(process.env.SUMMARY_DAILY_LIMIT ?? '5', 10);
 
 @Controller('summary')
 @UseGuards(JwtAuthGuard)
