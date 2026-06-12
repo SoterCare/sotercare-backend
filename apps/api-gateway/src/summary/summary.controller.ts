@@ -16,14 +16,13 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Not, IsNull, Between } from 'typeorm';
+import { Repository, Not, IsNull, MoreThanOrEqual } from 'typeorm';
 import type { RedisClientType } from 'redis';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { SummaryService } from './summary.service';
 import { SummaryHistory } from './summary-history.entity';
 
 const DAILY_LIMIT = 5;
-const COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes
 
 @Controller('summary')
 @UseGuards(JwtAuthGuard)
@@ -38,27 +37,20 @@ export class SummaryController {
     private readonly redisClient: RedisClientType,
   ) {}
 
-  private todayBounds() {
+  private todayUTCStart(): Date {
     const now = new Date();
-    const todayStart = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-    );
-    const tomorrowStart = new Date(todayStart.getTime() + 86_400_000);
-    return { now, todayStart, tomorrowStart };
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   }
 
-  private async fetchTodayOnDemandRows(userId: number) {
-    const { now, todayStart, tomorrowStart } = this.todayBounds();
-    const rows = await this.summaryHistoryRepo.find({
+  private countTodayGenerations(userId: number): Promise<number> {
+    return this.summaryHistoryRepo.count({
       where: {
         userId,
         reportType: 'on_demand',
         windowStart: Not(IsNull()),
-        createdAt: Between(todayStart, tomorrowStart),
+        createdAt: MoreThanOrEqual(this.todayUTCStart()),
       },
-      order: { createdAt: 'DESC' },
     });
-    return { rows, now, tomorrowStart };
   }
 
   private async acquireSummaryLock(userId: number, date: string): Promise<boolean> {
@@ -99,26 +91,8 @@ export class SummaryController {
   @Get('usage')
   async getUsage(@Req() req: any) {
     const userId: number = req.user.userId;
-    const { rows, now, tomorrowStart } = await this.fetchTodayOnDemandRows(userId);
-
-    const usedToday = rows.length;
-    const lastCreatedAt = rows[0]?.createdAt ?? null;
-    const msSinceLast = lastCreatedAt
-      ? now.getTime() - new Date(lastCreatedAt).getTime()
-      : Infinity;
-    const cooldownMs = Math.max(0, COOLDOWN_MS - msSinceLast);
-
-    return {
-      usedToday,
-      limitPerDay: DAILY_LIMIT,
-      nextAvailableAt:
-        cooldownMs > 0
-          ? new Date(now.getTime() + cooldownMs).toISOString()
-          : usedToday >= DAILY_LIMIT
-            ? tomorrowStart.toISOString()
-            : null,
-      cooldownSeconds: cooldownMs > 0 ? Math.ceil(cooldownMs / 1000) : 0,
-    };
+    const usedToday = await this.countTodayGenerations(userId);
+    return { usedToday, limitPerDay: DAILY_LIMIT };
   }
 
   @Post()
@@ -130,57 +104,19 @@ export class SummaryController {
     const reportDate = SummaryController.extractDate(body);
     this.logger.log(`[generateSummary] userId=${userId} reportDate=${reportDate}`);
 
-    const { rows, now, tomorrowStart } = await this.fetchTodayOnDemandRows(userId);
+    const usedToday = await this.countTodayGenerations(userId);
 
-    const usedToday = rows.length;
-    const lastRow = rows[0] ?? null;
-    const msSinceLast = lastRow
-      ? now.getTime() - new Date(lastRow.createdAt).getTime()
-      : Infinity;
-    const cooldownMs = Math.max(0, COOLDOWN_MS - msSinceLast);
-    const nextAvailableAt =
-      cooldownMs > 0 ? new Date(now.getTime() + cooldownMs).toISOString() : null;
-    const cooldownSeconds = cooldownMs > 0 ? Math.ceil(cooldownMs / 1000) : 0;
-
-    // Within 30-min cooldown — return last result without calling the LLM.
-    if (cooldownMs > 0 && lastRow?.summary) {
-      let lastReport: any = null;
-      try {
-        lastReport = JSON.parse(lastRow.summary);
-      } catch {}
-      this.logger.log(
-        `[generateSummary] cooldown active (${cooldownSeconds}s) for userId=${userId}`,
-      );
-      return {
-        cached: true,
-        summary: lastReport?.summary ?? '',
-        report: lastReport,
-        hasCritical: lastRow.hasCritical,
-        usedToday,
-        limitPerDay: DAILY_LIMIT,
-        nextAvailableAt,
-        cooldownSeconds,
-      };
-    }
-
-    // Daily limit exhausted — resets at UTC midnight.
     if (usedToday >= DAILY_LIMIT) {
       throw new ForbiddenException({
         message: `Daily generation limit reached (${usedToday}/${DAILY_LIMIT}). Resets at midnight UTC.`,
         usedToday,
         limitPerDay: DAILY_LIMIT,
-        nextAvailableAt: tomorrowStart.toISOString(),
-        cooldownSeconds: Math.ceil((tomorrowStart.getTime() - now.getTime()) / 1000),
       });
     }
 
     const windowStart =
       reportDate === 'today'
-        ? (() => {
-            const d = new Date();
-            d.setUTCHours(0, 0, 0, 0);
-            return d;
-          })()
+        ? this.todayUTCStart()
         : new Date(`${reportDate}T00:00:00.000Z`);
 
     if (!(await this.acquireSummaryLock(userId, reportDate))) {
@@ -238,14 +174,11 @@ export class SummaryController {
     await this.releaseSummaryLock(userId, reportDate);
 
     return {
-      cached: false,
       summary: report.summary ?? '',
       report,
       hasCritical,
       usedToday: usedToday + 1,
       limitPerDay: DAILY_LIMIT,
-      nextAvailableAt: new Date(now.getTime() + COOLDOWN_MS).toISOString(),
-      cooldownSeconds: Math.ceil(COOLDOWN_MS / 1000),
     };
   }
 
