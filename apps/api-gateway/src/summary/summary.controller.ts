@@ -16,13 +16,14 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Not, IsNull } from 'typeorm';
+import { Repository, Not, IsNull, Between } from 'typeorm';
 import type { RedisClientType } from 'redis';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { SummaryService } from './summary.service';
 import { SummaryHistory } from './summary-history.entity';
 
-const GENERATION_LIMIT = 5;
+const DAILY_LIMIT = 5;
+const COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes
 
 @Controller('summary')
 @UseGuards(JwtAuthGuard)
@@ -36,6 +37,29 @@ export class SummaryController {
     @Inject('REDIS_CLIENT')
     private readonly redisClient: RedisClientType,
   ) {}
+
+  private todayBounds() {
+    const now = new Date();
+    const todayStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const tomorrowStart = new Date(todayStart.getTime() + 86_400_000);
+    return { now, todayStart, tomorrowStart };
+  }
+
+  private async fetchTodayOnDemandRows(userId: number) {
+    const { now, todayStart, tomorrowStart } = this.todayBounds();
+    const rows = await this.summaryHistoryRepo.find({
+      where: {
+        userId,
+        reportType: 'on_demand',
+        windowStart: Not(IsNull()),
+        createdAt: Between(todayStart, tomorrowStart),
+      },
+      order: { createdAt: 'DESC' },
+    });
+    return { rows, now, tomorrowStart };
+  }
 
   private async acquireSummaryLock(userId: number, date: string): Promise<boolean> {
     try {
@@ -61,14 +85,6 @@ export class SummaryController {
     }
   }
 
-  /**
-   * Derives the report date from the request body.
-   *
-   * Priority:
-   *   1. body.date  — explicit YYYY-MM-DD field
-   *   2. body.text  — parse first YYYY-MM-DD found in the text
-   *   3. Default    — 'today'
-   */
   private static extractDate(body: { text?: string; date?: string }): string {
     if (body.date && /^\d{4}-\d{2}-\d{2}$/.test(body.date)) {
       return body.date;
@@ -83,10 +99,26 @@ export class SummaryController {
   @Get('usage')
   async getUsage(@Req() req: any) {
     const userId: number = req.user.userId;
-    const used = await this.summaryHistoryRepo.count({
-      where: { userId, reportType: 'on_demand', windowStart: Not(IsNull()) },
-    });
-    return { used, limit: GENERATION_LIMIT };
+    const { rows, now, tomorrowStart } = await this.fetchTodayOnDemandRows(userId);
+
+    const usedToday = rows.length;
+    const lastCreatedAt = rows[0]?.createdAt ?? null;
+    const msSinceLast = lastCreatedAt
+      ? now.getTime() - new Date(lastCreatedAt).getTime()
+      : Infinity;
+    const cooldownMs = Math.max(0, COOLDOWN_MS - msSinceLast);
+
+    return {
+      usedToday,
+      limitPerDay: DAILY_LIMIT,
+      nextAvailableAt:
+        cooldownMs > 0
+          ? new Date(now.getTime() + cooldownMs).toISOString()
+          : usedToday >= DAILY_LIMIT
+            ? tomorrowStart.toISOString()
+            : null,
+      cooldownSeconds: cooldownMs > 0 ? Math.ceil(cooldownMs / 1000) : 0,
+    };
   }
 
   @Post()
@@ -98,7 +130,50 @@ export class SummaryController {
     const reportDate = SummaryController.extractDate(body);
     this.logger.log(`[generateSummary] userId=${userId} reportDate=${reportDate}`);
 
-    // windowStart is UTC midnight for the report date — used as the cache key.
+    const { rows, now, tomorrowStart } = await this.fetchTodayOnDemandRows(userId);
+
+    const usedToday = rows.length;
+    const lastRow = rows[0] ?? null;
+    const msSinceLast = lastRow
+      ? now.getTime() - new Date(lastRow.createdAt).getTime()
+      : Infinity;
+    const cooldownMs = Math.max(0, COOLDOWN_MS - msSinceLast);
+    const nextAvailableAt =
+      cooldownMs > 0 ? new Date(now.getTime() + cooldownMs).toISOString() : null;
+    const cooldownSeconds = cooldownMs > 0 ? Math.ceil(cooldownMs / 1000) : 0;
+
+    // Within 30-min cooldown — return last result without calling the LLM.
+    if (cooldownMs > 0 && lastRow?.summary) {
+      let lastReport: any = null;
+      try {
+        lastReport = JSON.parse(lastRow.summary);
+      } catch {}
+      this.logger.log(
+        `[generateSummary] cooldown active (${cooldownSeconds}s) for userId=${userId}`,
+      );
+      return {
+        cached: true,
+        summary: lastReport?.summary ?? '',
+        report: lastReport,
+        hasCritical: lastRow.hasCritical,
+        usedToday,
+        limitPerDay: DAILY_LIMIT,
+        nextAvailableAt,
+        cooldownSeconds,
+      };
+    }
+
+    // Daily limit exhausted — resets at UTC midnight.
+    if (usedToday >= DAILY_LIMIT) {
+      throw new ForbiddenException({
+        message: `Daily generation limit reached (${usedToday}/${DAILY_LIMIT}). Resets at midnight UTC.`,
+        usedToday,
+        limitPerDay: DAILY_LIMIT,
+        nextAvailableAt: tomorrowStart.toISOString(),
+        cooldownSeconds: Math.ceil((tomorrowStart.getTime() - now.getTime()) / 1000),
+      });
+    }
+
     const windowStart =
       reportDate === 'today'
         ? (() => {
@@ -108,51 +183,8 @@ export class SummaryController {
           })()
         : new Date(`${reportDate}T00:00:00.000Z`);
 
-    // Count total on-demand generations for this user.
-    const used = await this.summaryHistoryRepo.count({
-      where: { userId, reportType: 'on_demand', windowStart: Not(IsNull()) },
-    });
-
-    // Cache check: return existing report for this date if one exists.
-    const existing = await this.summaryHistoryRepo.findOne({
-      where: { userId, windowStart },
-      order: { createdAt: 'DESC' },
-    });
-    if (existing?.summary) {
-      this.logger.log(`[generateSummary] cache hit for userId=${userId}`);
-      const cached = JSON.parse(existing.summary);
-      return {
-        cached: true,
-        summary: cached.summary ?? '',
-        report: cached,
-        hasCritical: existing.hasCritical,
-        used,
-        limit: GENERATION_LIMIT,
-      };
-    }
-
-    // Enforce generation limit (cache hits above are free).
-    if (used >= GENERATION_LIMIT) {
-      throw new ForbiddenException(
-        `Generation limit reached (${GENERATION_LIMIT}/${GENERATION_LIMIT}). No generations remaining.`,
-      );
-    }
-
     if (!(await this.acquireSummaryLock(userId, reportDate))) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
-      const raced = await this.summaryHistoryRepo.findOne({
-        where: { userId, windowStart },
-        order: { createdAt: 'DESC' },
-      });
-      if (raced?.summary) {
-        const cached = JSON.parse(raced.summary);
-        return {
-          cached: true,
-          summary: cached.summary ?? '',
-          report: cached,
-          hasCritical: raced.hasCritical,
-        };
-      }
       throw new ConflictException(
         'Summary generation already in progress — retry shortly.',
       );
@@ -163,15 +195,18 @@ export class SummaryController {
       this.logger.log(`[generateSummary] calling gRPC analyzeData userId=${userId}`);
       const requestData = JSON.stringify({ type: 'brief', date: reportDate });
       grpcResponse = await this.summaryService.analyzeData(requestData, userId);
-      this.logger.log(`[generateSummary] gRPC response keys=${Object.keys(grpcResponse ?? {}).join(',')}`);
+      this.logger.log(
+        `[generateSummary] gRPC response keys=${Object.keys(grpcResponse ?? {}).join(',')}`,
+      );
     } catch (err) {
-      this.logger.error(`[generateSummary] gRPC analyzeData failed: ${err instanceof Error ? err.message : String(err)}`);
+      this.logger.error(
+        `[generateSummary] gRPC failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
       await this.releaseSummaryLock(userId, reportDate);
       throw err;
     }
 
-    const reportJson =
-      grpcResponse.report_json ?? grpcResponse.reportJson ?? null;
+    const reportJson = grpcResponse.report_json ?? grpcResponse.reportJson ?? null;
 
     if (!reportJson) {
       await this.releaseSummaryLock(userId, reportDate);
@@ -207,8 +242,10 @@ export class SummaryController {
       summary: report.summary ?? '',
       report,
       hasCritical,
-      used: used + 1,
-      limit: GENERATION_LIMIT,
+      usedToday: usedToday + 1,
+      limitPerDay: DAILY_LIMIT,
+      nextAvailableAt: new Date(now.getTime() + COOLDOWN_MS).toISOString(),
+      cooldownSeconds: Math.ceil(COOLDOWN_MS / 1000),
     };
   }
 
