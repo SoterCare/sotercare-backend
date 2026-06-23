@@ -20,7 +20,7 @@ import { SyncModule } from './sync/sync.module';
 import { TimelineModule } from './timeline/timeline.module';
 import { IotDeviceModule } from './iot-device/iot-device.module';
 import { RealtimeModule } from './realtime/realtime.module';
-import { SummaryModule } from './summary/summary.module';
+import { NurseModule } from './nurse/nurse.module';
 
 // Keepalive pings keep the long-lived gRPC channels from silently dying behind
 // NATs/load balancers, so the first call after an idle period doesn't stall on
@@ -92,7 +92,7 @@ function requireJwtSecret(): string {
     AlertsModule,
     TimelineModule,
     RealtimeModule,
-    SummaryModule,
+    NurseModule,
     ClientsModule.register([
       {
         name: 'AUTH_SERVICE',
