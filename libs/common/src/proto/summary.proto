@@ -2,22 +2,19 @@ syntax = "proto3";
 package summary;
 
 service SummaryService {
-  rpc AnalyzeData          (AnalyzeDataRequest)          returns (AnalyzeDataResponse);
-  rpc UploadPrescription   (UploadPrescriptionRequest)   returns (UploadPrescriptionResponse);
-  rpc QueryPrescription    (QueryPrescriptionRequest)    returns (QueryPrescriptionResponse);
+  rpc Chat               (ChatRequest)               returns (ChatResponse);
+  rpc UploadPrescription (UploadPrescriptionRequest) returns (UploadPrescriptionResponse);
 }
 
-message AnalyzeDataRequest {
-  string data_json = 1;
-  string format    = 2;
-  int32  user_id   = 3; // Authenticated user id (from JWT), used for report attribution
+message ChatRequest {
+  int32  user_id    = 1;
+  string message    = 2;
+  string session_id = 3;
 }
 
-message AnalyzeDataResponse {
-  string report_json              = 1;
-  bool   has_critical             = 2;
-  string overview                 = 3;
-  repeated string recommendations = 4;
+message ChatResponse {
+  string reply      = 1;
+  string session_id = 2;
 }
 
 message UploadPrescriptionRequest {
@@ -30,14 +27,4 @@ message UploadPrescriptionResponse {
   bool   success = 1;
   string message = 2;
   string doc_id  = 3;
-}
-
-message QueryPrescriptionRequest {
-  int32  user_id  = 1;
-  string question = 2;
-}
-
-message QueryPrescriptionResponse {
-  bool   success = 1;
-  string answer  = 2;
 }
