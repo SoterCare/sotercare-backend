@@ -29,49 +29,97 @@ const DEVICE_KEY  = process.env.DEVICE_KEY  || "TW3DNioQHndfvbcIyVex2KqBCJFwjZuO
 const USER_TOKEN  = process.env.USER_TOKEN  || "";
 const INTERVAL_MS = Number(process.env.INTERVAL_MS) || 1500;
 
-// ─── Alert threshold reference (keep in sync with backend) ───────────────────
+// ─── Alert threshold reference (verified against backend code) ───────────────
 //
 // NestJS AlertWriterService  (fires immediately on device_data):
-//   moisture >= 25           → MOISTURE  "Moisture Detected"
-//   sos == true              → HELP_CALL "Help Call"
-//   fall_alert == true       → FALL      "Fall Detected"
+//   sos == true                 → HELP_CALL   "Help Call"
+//   fall_alert == true          → FALL        "Fall Detected"
+//   moisture >= 25              → MOISTURE    "Moisture Detected"
+//   (no temperature checks here; no low-moisture rule)
 //
 // Python Safety Guard        (polled every ~10 s from vital_sign table):
-//   temperature > 38.0 °C   → TEMPERATURE "Fever detected"
-//   temperature < 35.5 °C   → TEMPERATURE "Low temperature"
-//   moisture > 80            → MOISTURE  "High moisture"
-//   moisture < 15            → MOISTURE  "Low moisture"
-//   spo2 / heartRate: NOT SENT by this device — no sensor attached.
+//   sos == true                 → HELP_CALL   (dedup'd with the immediate one)
+//   fall_alert == true          → FALL        (dedup'd with the immediate one)
+//   38.0 < temperature <= 45.0  → TEMPERATURE "Fever Detected"
+//   temperature < 35.5          → TEMPERATURE "Low Temp / Sensor Misplacement"
+//   temperature > 45.0          → TEMPERATURE "Sensor Misplacement"
+//   moisture > 80               → MOISTURE    "High Moisture"
+//   (NO low-moisture rule — moisture below 25/15 never alerts)
+//   spo2 / heartRate: NOT SENT by this device, and the guard has no SpO2/HR
+//   threshold checks anyway, so they never alert.
 
 // ─── Test scenarios ───────────────────────────────────────────────────────────
 
 const SCENARIOS = [
+  // ── Gait-state sweep ─────────────────────────────────────────────────────
+  // All five gait states with normal vitals. Gait never triggers an alert on
+  // its own, so each should sync cleanly with no alert.
   {
-    label: "Baseline — normal vitals, no alerts",
+    label: "Walking — normal vitals, no alerts",
     expect: "none",
     data: {
       temperature: 36.6,
       ambientTemp: 24.0,
       moisture: 10,
-      gait_label: "walking",
+      gait_label: "Walking",
       sos: false,
       fall_alert: false,
       thighnode_status: "connected",
     },
   },
   {
-    label: "Slight moisture rise — still below threshold",
+    label: "Standing Up — normal vitals, no alerts",
     expect: "none",
     data: {
       temperature: 36.7,
       ambientTemp: 24.2,
-      moisture: 20,
-      gait_label: "standing",
+      moisture: 12,
+      gait_label: "Standing Up",
       sos: false,
       fall_alert: false,
       thighnode_status: "connected",
     },
   },
+  {
+    label: "Sitting Down — normal vitals, no alerts",
+    expect: "none",
+    data: {
+      temperature: 36.5,
+      ambientTemp: 24.1,
+      moisture: 9,
+      gait_label: "Sitting Down",
+      sos: false,
+      fall_alert: false,
+      thighnode_status: "connected",
+    },
+  },
+  {
+    label: "Sitting — normal vitals, no alerts",
+    expect: "none",
+    data: {
+      temperature: 36.6,
+      ambientTemp: 24.3,
+      moisture: 11,
+      gait_label: "Sitting",
+      sos: false,
+      fall_alert: false,
+      thighnode_status: "connected",
+    },
+  },
+  {
+    label: "Idle — resting, no movement, no alerts",
+    expect: "none",
+    data: {
+      temperature: 36.5,
+      ambientTemp: 24.1,
+      moisture: 8,
+      gait_label: "Idle",
+      sos: false,
+      fall_alert: false,
+      thighnode_status: "connected",
+    },
+  },
+  // ── Alert-triggering scenarios ───────────────────────────────────────────
   {
     label: "Moisture spike — MOISTURE alert (moisture=55 >= 25)",
     expect: "MOISTURE",
@@ -79,59 +127,7 @@ const SCENARIOS = [
       temperature: 36.8,
       ambientTemp: 24.5,
       moisture: 55,
-      gait_label: "sitting down",
-      sos: false,
-      fall_alert: false,
-      thighnode_status: "connected",
-    },
-  },
-  {
-    label: "SOS button pressed — HELP_CALL alert",
-    expect: "HELP_CALL",
-    data: {
-      temperature: 36.7,
-      ambientTemp: 23.8,
-      moisture: 12,
-      gait_label: "lying down",
-      sos: true,
-      fall_alert: false,
-      thighnode_status: "connected",
-    },
-  },
-  {
-    label: "Fall detected — FALL alert",
-    expect: "FALL",
-    data: {
-      temperature: 36.6,
-      ambientTemp: 24.1,
-      moisture: 8,
-      gait_label: "lying down",
-      sos: false,
-      fall_alert: true,
-      thighnode_status: "connected",
-    },
-  },
-  {
-    label: "SOS + Fall + high moisture simultaneously — HELP_CALL + FALL + MOISTURE",
-    expect: "HELP_CALL, FALL, MOISTURE",
-    data: {
-      temperature: 36.9,
-      ambientTemp: 24.0,
-      moisture: 80,
-      gait_label: "lying down",
-      sos: true,
-      fall_alert: true,
-      thighnode_status: "connected",
-    },
-  },
-  {
-    label: "Fever — safety guard TEMPERATURE alert (temp=38.6 > 38.0, fires within ~10 s)",
-    expect: "TEMPERATURE (safety guard, delayed)",
-    data: {
-      temperature: 38.6,
-      ambientTemp: 25.0,
-      moisture: 18,
-      gait_label: "lying down",
+      gait_label: "Sitting",
       sos: false,
       fall_alert: false,
       thighnode_status: "connected",
@@ -144,33 +140,7 @@ const SCENARIOS = [
       temperature: 35.2,
       ambientTemp: 22.0,
       moisture: 5,
-      gait_label: "walking",
-      sos: false,
-      fall_alert: false,
-      thighnode_status: "connected",
-    },
-  },
-  {
-    label: "Thighnode disconnected — stored in vitals, no alert",
-    expect: "none",
-    data: {
-      temperature: 36.6,
-      ambientTemp: 24.0,
-      moisture: 14,
-      gait_label: "N/A",
-      sos: false,
-      fall_alert: false,
-      thighnode_status: "disconnected",
-    },
-  },
-  {
-    label: "Back to baseline — normal vitals, no alerts",
-    expect: "none",
-    data: {
-      temperature: 36.7,
-      ambientTemp: 24.3,
-      moisture: 11,
-      gait_label: "walking",
+      gait_label: "Walking",
       sos: false,
       fall_alert: false,
       thighnode_status: "connected",
