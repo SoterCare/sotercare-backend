@@ -15,7 +15,7 @@ interface NurseGrpcService {
   }): Observable<{ success: boolean; message: string; doc_id: string }>;
 }
 
-const AI_GRPC_TIMEOUT_MS = 60_000;
+const AI_GRPC_TIMEOUT_MS = 120_000;
 
 @Injectable()
 export class NurseService implements OnModuleInit {
