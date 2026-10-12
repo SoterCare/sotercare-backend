@@ -8,15 +8,7 @@ import { createClient } from 'redis';
 import { AuthServiceController } from './auth-service.controller';
 import { AuthServiceService } from './auth-service.service';
 import { User } from './user.entity';
-
-// H2: require a real secret; never sign with a public hard-coded fallback.
-function requireJwtSecret(): string {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error('JWT_SECRET environment variable must be set');
-  }
-  return secret;
-}
+import { requireJwtSecret } from './jwt-secret';
 
 @Module({
   imports: [

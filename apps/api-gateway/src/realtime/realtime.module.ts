@@ -3,18 +3,26 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { join } from 'path';
-import { Alert, Vital } from '../database/entities';
+import { Alert, DeviceEvent, Vital } from '../database/entities';
 import { IotDeviceModule } from '../iot-device/iot-device.module';
 import { SyncModule } from '../sync/sync.module';
 import { RealtimeGateway } from './realtime.gateway';
 import { VitalSyncService } from './vital-sync.service';
 import { AlertWriterService } from './alert-writer.service';
+import { UserSocketRegistry } from './user-socket.registry';
+import { AlertEventsPublisher } from './alert-events.publisher';
+import { AlertDispatchService } from '../alerts/alert-dispatch.service';
+import { MoistureEpisodeService } from '../alert-policy/moisture-episode.service';
+import { DeviceEventService } from './device-event.service';
+import { NotificationAttemptsService } from '../notifications/notification-attempts.service';
 
 @Global()
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Vital, Alert]),
-    JwtModule.register({ secret: process.env.JWT_SECRET || 'REMOVED-OLD-PUBLIC-FALLBACK' }),
+    TypeOrmModule.forFeature([Vital, Alert, DeviceEvent]),
+    // No hard-coded fallback: tokens are verified with process.env.JWT_SECRET
+    // explicitly in RealtimeGateway, and the app refuses to boot without it.
+    JwtModule.register({ secret: process.env.JWT_SECRET }),
     IotDeviceModule,
     SyncModule,
     ClientsModule.register([
@@ -32,7 +40,26 @@ import { AlertWriterService } from './alert-writer.service';
       },
     ]),
   ],
-  providers: [RealtimeGateway, VitalSyncService, AlertWriterService],
-  exports: [RealtimeGateway, VitalSyncService, AlertWriterService],
+  providers: [
+    RealtimeGateway,
+    VitalSyncService,
+    AlertWriterService,
+    UserSocketRegistry,
+    AlertEventsPublisher,
+    AlertDispatchService,
+    MoistureEpisodeService,
+    DeviceEventService,
+    NotificationAttemptsService,
+  ],
+  exports: [
+    RealtimeGateway,
+    VitalSyncService,
+    AlertWriterService,
+    UserSocketRegistry,
+    AlertEventsPublisher,
+    AlertDispatchService,
+    NotificationAttemptsService,
+    DeviceEventService,
+  ],
 })
 export class RealtimeModule {}

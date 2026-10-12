@@ -7,6 +7,8 @@ describe('AlertsService', () => {
       {
         find: jest.fn().mockResolvedValue([]),
       } as any,
+      {} as any,
+      { currentWindows: jest.fn().mockResolvedValue(new Map()) } as any,
     );
 
     await expect(service.getRecentAlerts(1)).resolves.toEqual({

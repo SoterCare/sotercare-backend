@@ -1,5 +1,14 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { sourceOf } from '../common/client-source';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { DismissTimelineItemDto } from './dto/dismiss-item.dto';
@@ -80,10 +89,15 @@ export class TimelineController {
   async restore(
     @CurrentUser() user: { userId: number },
     @Body() body: RestoreTimelineItemDto,
+    @Headers('x-client') client?: string,
   ) {
     return {
       success: true,
-      data: await this.timelineService.restore(user.userId, body),
+      data: await this.timelineService.restore(
+        user.userId,
+        body,
+        sourceOf(client),
+      ),
     };
   }
 
@@ -93,10 +107,15 @@ export class TimelineController {
   async dismiss(
     @CurrentUser() user: { userId: number },
     @Body() body: DismissTimelineItemDto,
+    @Headers('x-client') client?: string,
   ) {
     return {
       success: true,
-      data: await this.timelineService.dismiss(user.userId, body),
+      data: await this.timelineService.dismiss(
+        user.userId,
+        body,
+        sourceOf(client),
+      ),
     };
   }
 }

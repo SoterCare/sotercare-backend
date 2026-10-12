@@ -1,14 +1,7 @@
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
 import { Injectable } from '@nestjs/common';
-
-function requireJwtSecret(): string {
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
-        throw new Error('JWT_SECRET environment variable must be set');
-    }
-    return secret;
-}
+import { requireJwtSecret } from '../common/jwt-secret';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -16,7 +9,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         super({
             jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
             ignoreExpiration: false,
-            // H2: require a real secret instead of the public 'REMOVED-OLD-PUBLIC-FALLBACK' fallback.
+            // H2: require a real secret; never a publicly known fallback (see common/jwt-secret.ts).
             secretOrKey: requireJwtSecret(),
         });
     }

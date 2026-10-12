@@ -6,7 +6,12 @@ describe('DevicesService', () => {
     get: jest.fn().mockReturnValue(120),
   } as unknown as ConfigService;
 
-  const service = new DevicesService(configService, {} as any, {} as any);
+  const service = new DevicesService(
+    configService,
+    {} as any,
+    {} as any,
+    {} as any,
+  );
 
   it('infers online for recently seen devices', () => {
     const recent = new Date(Date.now() - 10_000);

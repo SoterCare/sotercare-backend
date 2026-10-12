@@ -1,8 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { MoreThanOrEqual, Repository } from 'typeorm';
 import { Device, DeviceStatus } from '../database/entities';
+import { OwnershipService } from '../ownership/ownership.service';
 
 @Injectable()
 export class DevicesService {
@@ -14,6 +15,7 @@ export class DevicesService {
     private readonly deviceRepository: Repository<Device>,
     @InjectRepository(DeviceStatus)
     private readonly deviceStatusRepository: Repository<DeviceStatus>,
+    private readonly ownershipService: OwnershipService,
   ) {
     this.onlineTtlSeconds = Number(
       this.configService.get('DEVICE_ONLINE_TTL_SECONDS', 120),
@@ -21,10 +23,14 @@ export class DevicesService {
   }
 
   async getDevices(userId: number, includeStatus: boolean, minimal = false) {
-    const devices = await this.deviceRepository.find({
-      where: { userId },
-      order: { updatedAt: 'DESC' },
-    });
+    // PH0-07: list only devices the caller holds a current ownership period for.
+    const windows = await this.ownershipService.currentWindows(userId);
+    const devices = (
+      await this.deviceRepository.find({
+        where: { userId },
+        order: { updatedAt: 'DESC' },
+      })
+    ).filter((device) => windows.has(device.id));
 
     // Minimal view never uses statuses — skip the status query entirely.
     if (minimal) {
@@ -50,7 +56,11 @@ export class DevicesService {
         .addOrderBy('s.receivedAt', 'DESC')
         .getMany();
       for (const status of latestStatuses) {
-        statusByDevice.set(status.deviceId, status);
+        // A snapshot from before the caller's period belongs to a previous owner.
+        const since = windows.get(status.deviceId);
+        if (since && status.receivedAt >= since) {
+          statusByDevice.set(status.deviceId, status);
+        }
       }
     }
 
@@ -91,14 +101,17 @@ export class DevicesService {
       where: { id: deviceId, userId },
     });
 
-    if (!device) {
+    const since = device
+      ? await this.ownershipService.currentWindow(userId, deviceId)
+      : null;
+    if (!device || !since) {
       throw new NotFoundException(
         'Device not found or does not belong to user',
       );
     }
 
     const latestStatus = await this.deviceStatusRepository.findOne({
-      where: { deviceId },
+      where: { deviceId, receivedAt: MoreThanOrEqual(since) },
       order: { receivedAt: 'DESC' },
     });
 

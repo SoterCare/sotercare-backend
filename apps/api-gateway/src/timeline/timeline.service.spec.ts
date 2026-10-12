@@ -16,6 +16,15 @@ const alertRepository = {
   findOne: jest.fn(),
   save: jest.fn(),
   createQueryBuilder: jest.fn(),
+  // AR-4: dismiss/restore update conditionally and audit in one transaction.
+  manager: {
+    transaction: jest.fn((cb: (m: unknown) => unknown) =>
+      cb({
+        update: jest.fn().mockResolvedValue({ affected: 1 }),
+        insert: jest.fn().mockResolvedValue({}),
+      }),
+    ),
+  },
 };
 
 function mockQueryBuilder(rawRows: unknown[]) {
@@ -40,6 +49,10 @@ describe('TimelineService', () => {
       deviceRepository as any,
       vitalRepository as any,
       alertRepository as any,
+      {
+        currentWindow: jest.fn().mockResolvedValue(new Date(0)),
+        currentWindows: jest.fn().mockResolvedValue(new Map()),
+      } as any,
     );
   });
 
@@ -109,7 +122,6 @@ describe('TimelineService', () => {
       dismissedAt: new Date('2026-03-12T09:12:00Z'),
     };
     alertRepository.findOne.mockResolvedValue(alert);
-    alertRepository.save.mockImplementation((value: any) => value);
 
     await expect(service.restore(1, { id: 'al_1001' })).resolves.toEqual({
       restoredId: 'al_1001',

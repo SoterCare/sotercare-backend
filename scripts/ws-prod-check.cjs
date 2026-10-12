@@ -10,8 +10,8 @@
  *
  * Override defaults via environment variables:
  *   WS_URL      WebSocket base URL  (default: wss://backend.sotercare.com)
- *   DEVICE_ID   Device ID           (default: pi-ffc585939c23)
- *   DEVICE_KEY  Device secret key   (default: see below)
+ *   DEVICE_ID   Device ID           (default: pi-ffc585939c23; alias SOTERCARE_DEVICE_ID)
+ *   DEVICE_KEY  Device secret key   (REQUIRED, no default; alias SOTERCARE_DEVICE_KEY. Never commit it.)
  *   USER_TOKEN  JWT bearer token — if set, opens a second socket as a user
  *               so alert.new / device.logs.ingested events are printed live
  *   INTERVAL_MS Milliseconds between sends (default: 1500)
@@ -24,10 +24,15 @@ const { io } = require("socket.io-client");
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 const WS_BASE     = process.env.WS_URL      || "wss://backend.sotercare.com";
-const DEVICE_ID   = process.env.DEVICE_ID   || "pi-ffc585939c23";
-const DEVICE_KEY  = process.env.DEVICE_KEY  || "TW3DNioQHndfvbcIyVex2KqBCJFwjZuOpPsEYa15";
+const DEVICE_ID   = process.env.SOTERCARE_DEVICE_ID || process.env.DEVICE_ID || "pi-ffc585939c23";
+const DEVICE_KEY  = process.env.SOTERCARE_DEVICE_KEY || process.env.DEVICE_KEY || "";
 const USER_TOKEN  = process.env.USER_TOKEN  || "";
 const INTERVAL_MS = Number(process.env.INTERVAL_MS) || 1500;
+
+if (!DEVICE_KEY) {
+  console.error("Missing device key: set SOTERCARE_DEVICE_KEY (or DEVICE_KEY) in your shell. Never commit it.");
+  process.exit(1);
+}
 
 // ─── Alert threshold reference (verified against backend code) ───────────────
 //
@@ -120,6 +125,32 @@ const SCENARIOS = [
     },
   },
   // ── Alert-triggering scenarios ───────────────────────────────────────────
+  {
+    label: "SOS pressed — HELP_CALL alert (sos=true)",
+    expect: "HELP_CALL",
+    data: {
+      temperature: 36.7,
+      ambientTemp: 24.4,
+      moisture: 10,
+      gait_label: "Sitting",
+      sos: true,
+      fall_alert: false,
+      thighnode_status: "connected",
+    },
+  },
+  {
+    label: "Fall detected — FALL alert (fall_alert=true)",
+    expect: "FALL",
+    data: {
+      temperature: 36.6,
+      ambientTemp: 24.2,
+      moisture: 10,
+      gait_label: "Walking",
+      sos: false,
+      fall_alert: true,
+      thighnode_status: "connected",
+    },
+  },
   {
     label: "Moisture spike — MOISTURE alert (moisture=55 >= 25)",
     expect: "MOISTURE",

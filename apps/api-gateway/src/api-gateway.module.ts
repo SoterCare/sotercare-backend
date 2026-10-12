@@ -19,8 +19,12 @@ import { DevicesModule } from './devices/devices.module';
 import { SyncModule } from './sync/sync.module';
 import { TimelineModule } from './timeline/timeline.module';
 import { IotDeviceModule } from './iot-device/iot-device.module';
+import { OwnershipModule } from './ownership/ownership.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { NurseModule } from './nurse/nurse.module';
+import { buildTypeOrmOptions } from './database/typeorm-options';
+import { requireJwtSecret } from './common/jwt-secret';
 
 // Keepalive pings keep the long-lived gRPC channels from silently dying behind
 // NATs/load balancers, so the first call after an idle period doesn't stall on
@@ -32,16 +36,6 @@ const GRPC_CHANNEL_OPTIONS = {
   'grpc.keepalive_permit_without_calls': 1,
 };
 
-// H2: never fall back to a public hard-coded secret. Fail fast at boot so a
-// missing JWT_SECRET can't silently make every token forgeable.
-function requireJwtSecret(): string {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error('JWT_SECRET environment variable must be set');
-  }
-  return secret;
-}
-
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -50,34 +44,7 @@ function requireJwtSecret(): string {
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => {
-        // Prefer a managed connection string (Neon/Supabase/Koyeb Postgres) so the
-        // data lives outside the ephemeral container. SSL is required by those
-        // providers; auto-enable it whenever a URL is set (or DB_SSL=true).
-        const databaseUrl = configService.get<string>('DATABASE_URL');
-        const useSsl =
-          !!databaseUrl || configService.get('DB_SSL', 'false') === 'true';
-        return {
-          type: 'postgres',
-          ...(databaseUrl
-            ? { url: databaseUrl }
-            : {
-                host: configService.get<string>('DB_HOST', '127.0.0.1'),
-                port: Number(configService.get<string>('DB_PORT', '5432')),
-                username: configService.get<string>('DB_USER', 'postgres'),
-                password: configService.get<string>('DB_PASS', 'postgres'),
-                database: configService.get<string>('DB_NAME', 'auth_db'),
-              }),
-          ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
-          // Bound the pg pool and individual statements so one slow query
-          // can't monopolize the gateway's database access.
-          extra: { max: 20, statement_timeout: 10000 },
-          autoLoadEntities: true,
-          // C3: auto-schema-sync only outside production. In prod, schema is
-          // managed by migrations so TypeORM can't drop/retype columns under us.
-          synchronize: process.env.NODE_ENV !== 'production',
-        };
-      },
+      useFactory: buildTypeOrmOptions,
       inject: [ConfigService],
     }),
     PassportModule,
@@ -85,6 +52,7 @@ function requireJwtSecret(): string {
       secret: requireJwtSecret(),
     }),
     RedisModule,
+    OwnershipModule,
     IotDeviceModule,
     SyncModule,
     DevicesModule,
@@ -92,6 +60,7 @@ function requireJwtSecret(): string {
     AlertsModule,
     TimelineModule,
     RealtimeModule,
+    NotificationsModule,
     NurseModule,
     ClientsModule.register([
       {

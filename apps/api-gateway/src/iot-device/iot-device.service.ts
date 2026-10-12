@@ -5,12 +5,13 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { randomBytes, scrypt as scryptCb, timingSafeEqual } from 'crypto';
 import { promisify } from 'util';
-import { Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 import { IotDevice } from './iot-device.entity';
 import { Device, DeviceType } from '../database/entities';
+import { OwnershipService } from '../ownership/ownership.service';
 
 // Async scrypt — the sync variant blocks the whole event loop ~50-100ms per
 // verification, which stalls every other request under concurrent device syncs.
@@ -26,6 +27,18 @@ const WRITE_DEBOUNCE_MS = 60_000;
 const KEY_VERIFY_CACHE_TTL_MS = 60_000;
 const KEY_VERIFY_CACHE_MAX = 1000;
 
+/**
+ * devices.userId value for a dashboard row whose IoT device has no owner.
+ * User ids are serial and start at 1, so no account can match it; every read
+ * path filters on devices.userId, so writing it revokes access everywhere.
+ */
+export const UNOWNED_USER_ID = 0;
+
+// Long-lived gateway sockets re-check ownership per batch through this cache.
+// Claim/unclaim invalidate it immediately in this process; the TTL bounds
+// staleness when another instance changed ownership.
+const OWNER_CACHE_TTL_MS = 5_000;
+
 @Injectable()
 export class IotDeviceService {
   private readonly claimOnlineTtlSeconds: number;
@@ -35,6 +48,10 @@ export class IotDeviceService {
     string,
     { rawKey: string; hash: string; expires: number }
   >();
+  private readonly ownerCache = new Map<
+    string,
+    { ownership: { ownerId: number; since: Date } | null; expires: number }
+  >();
 
   constructor(
     private readonly configService: ConfigService,
@@ -42,6 +59,9 @@ export class IotDeviceService {
     private readonly iotDeviceRepository: Repository<IotDevice>,
     @InjectRepository(Device)
     private readonly deviceRepository: Repository<Device>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
+    private readonly ownershipService: OwnershipService,
   ) {
     this.claimOnlineTtlSeconds = Number(
       this.configService.get('IOT_ONLINE_TTL_SECONDS', 300),
@@ -213,15 +233,46 @@ export class IotDeviceService {
       }
     }
 
-    device.ownerId = userId;
-    device.isPaired = true;
-    await this.iotDeviceRepository.save(device);
-    await this.ensureDashboardDeviceRow(userId, device.deviceId);
+    // GAP-001: atomic check-and-set. Only an unowned device can change hands;
+    // a concurrent claimant's UPDATE matches zero rows instead of overwriting.
+    // PH0-07: the ownership interval opens in the same transaction.
+    await this.dataSource.transaction(async (manager) => {
+      const claimed = await manager.update(
+        IotDevice,
+        { deviceId, ownerId: IsNull() },
+        { ownerId: userId, isPaired: true },
+      );
+      if (!claimed.affected) {
+        const current = await manager.findOne(IotDevice, {
+          where: { deviceId },
+        });
+        if (current?.ownerId !== userId) {
+          throw new BadRequestException(
+            'Device is already claimed by another user',
+          );
+        }
+        if (!current.isPaired) {
+          await manager.update(
+            IotDevice,
+            { deviceId, ownerId: userId },
+            { isPaired: true },
+          );
+        }
+      }
+      await this.ownershipService.openInterval(
+        manager,
+        deviceId,
+        userId,
+        'claim',
+      );
+    });
+    this.ownerCache.delete(deviceId);
+    await this.ensureDashboardDeviceRow(userId, deviceId);
 
     return {
-      device_id: device.deviceId,
-      owner_id: device.ownerId,
-      is_paired: device.isPaired,
+      device_id: deviceId,
+      owner_id: userId,
+      is_paired: true,
       claimed_at: new Date().toISOString(),
     };
   }
@@ -243,16 +294,75 @@ export class IotDeviceService {
       throw new BadRequestException('Device is claimed by another user');
     }
 
-    device.ownerId = null;
-    device.isPaired = false;
-    await this.iotDeviceRepository.save(device);
+    await this.dataSource.transaction(async (manager) => {
+      const released = await manager.update(
+        IotDevice,
+        { deviceId, ownerId: userId },
+        { ownerId: null, isPaired: false },
+      );
+      if (!released.affected) {
+        throw new BadRequestException('Device is claimed by another user');
+      }
+      // PH0-07: close the ownership period in the same transaction.
+      await this.ownershipService.closeInterval(
+        manager,
+        deviceId,
+        userId,
+        'unclaim',
+      );
+      // Revoke the dashboard association too, otherwise the previous owner
+      // keeps reading the device through every devices.userId-scoped query.
+      await manager.update(
+        Device,
+        { id: deviceId, userId },
+        { userId: UNOWNED_USER_ID },
+      );
+    });
+    this.ownerCache.delete(deviceId);
 
     return {
-      device_id: device.deviceId,
+      device_id: deviceId,
       owner_id: null,
       is_paired: false,
       unclaimed_at: new Date().toISOString(),
     };
+  }
+
+  /**
+   * Current owner of a claimed device and the start of their ownership
+   * period, or null when unclaimed/unregistered or when the registry and the
+   * ownership periods disagree (fail closed). Used to revoke already-
+   * authenticated gateway sockets and to refuse data observed before the
+   * current owner's period (PH0-07).
+   */
+  async resolveCurrentOwnership(
+    deviceId: string,
+  ): Promise<{ ownerId: number; since: Date } | null> {
+    const now = Date.now();
+    const cached = this.ownerCache.get(deviceId);
+    if (cached && cached.expires > now) {
+      return cached.ownership;
+    }
+    const device = await this.iotDeviceRepository.findOne({
+      where: { deviceId },
+    });
+    const ownerId = device?.isPaired && device.ownerId ? device.ownerId : null;
+    const period = ownerId
+      ? await this.ownershipService.currentOwnership(deviceId)
+      : null;
+    const ownership =
+      ownerId && period && period.userId === ownerId
+        ? { ownerId, since: period.since }
+        : null;
+    this.ownerCache.set(deviceId, {
+      ownership,
+      expires: now + OWNER_CACHE_TTL_MS,
+    });
+    return ownership;
+  }
+
+  async resolveCurrentOwner(deviceId: string): Promise<number | null> {
+    return (await this.resolveCurrentOwnership(deviceId))?.ownerId ?? null;
   }
 
   async authenticateAndResolveOwner(deviceId: string, rawDeviceKey: string) {

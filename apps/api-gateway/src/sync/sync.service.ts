@@ -1,19 +1,24 @@
 import {
   BadRequestException,
+  ForbiddenException,
+  HttpException,
   Injectable,
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull, Repository } from 'typeorm';
 import {
   Alert,
   Device,
+  DeviceOwnership,
   DeviceStatus,
   RecordingSession,
   SyncHistory,
   Vital,
 } from '../database/entities';
+import { IotDevice } from '../iot-device/iot-device.entity';
+import { OwnershipService } from '../ownership/ownership.service';
 import { SyncBatchDto } from './dto/sync-batch.dto';
 
 @Injectable()
@@ -24,6 +29,7 @@ export class SyncService {
     @InjectDataSource() private readonly dataSource: DataSource,
     @InjectRepository(SyncHistory)
     private readonly syncHistoryRepository: Repository<SyncHistory>,
+    private readonly ownershipService: OwnershipService,
   ) {}
 
   async processRaspberryPiSync(userId: number, payload: SyncBatchDto) {
@@ -33,7 +39,8 @@ export class SyncService {
     }
 
     const receivedAt = new Date();
-    const idempotencyKey = `${payload.source}_${payload.slot}_${payload.syncedAt}`;
+    // Scoped by caller so one user's batch can never short-circuit another's.
+    const idempotencyKey = `${userId}_${payload.source}_${payload.slot}_${payload.syncedAt}`;
     const existingSync = await this.syncHistoryRepository.findOne({
       where: { idempotencyKey },
     });
@@ -68,10 +75,12 @@ export class SyncService {
             lastSyncSlot: payload.slot,
             syncSource: 'mobile_sync',
           }));
+          // GAP-001: verify (and, for brand-new ids, establish) ownership of
+          // every device the batch touches BEFORE writing anything else.
+          await this.assertBatchOwnership(manager, userId, payload, deviceRows);
           if (deviceRows.length > 0) {
-            // Insert-or-update on id, overwriting the same fields the old
-            // per-row save() wrote (userId/name/type/lastSeenAt/lastSyncSlot/
-            // syncSource).
+            // Every listed device is now verified as the caller's, so this
+            // upsert only refreshes metadata; it can no longer move ownership.
             await manager.upsert(Device, deviceRows, ['id']);
           }
 
@@ -197,6 +206,9 @@ export class SyncService {
         upserted,
       };
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       this.logger.error(
         'Failed to process sync batch',
         error instanceof Error ? error.stack : String(error),
@@ -204,6 +216,109 @@ export class SyncService {
       throw new InternalServerErrorException('Failed to process sync batch', {
         cause: error,
       });
+    }
+  }
+
+  /**
+   * A sync batch may only touch devices the caller owns. Ownership is
+   * established through /devices/claim (IoT registry) or, for an id unknown to
+   * both registries, by creating it here. Existing owners are never
+   * overwritten: new rows are inserted with ON CONFLICT DO NOTHING and every
+   * referenced row is then re-read under a row lock, so two concurrent batches
+   * racing for the same new id cannot both win.
+   */
+  private async assertBatchOwnership(
+    manager: EntityManager,
+    userId: number,
+    payload: SyncBatchDto,
+    deviceRows: Array<Partial<Device> & { id: string }>,
+  ) {
+    const referenced = new Set<string>([
+      ...deviceRows.map((device) => device.id),
+      ...(payload.deviceStatuses ?? []).map((status) => status.deviceId),
+      ...(payload.latestVitals ?? []).map((vital) => vital.deviceId),
+      ...(payload.recentAlerts ?? []).map((alert) => alert.deviceId),
+      ...(payload.recordingSessions ?? []).map((session) => session.deviceId),
+    ]);
+    if (referenced.size === 0) {
+      return;
+    }
+    const deviceIds = [...referenced];
+
+    const registered = await manager.find(IotDevice, {
+      where: { deviceId: In(deviceIds) },
+    });
+    if (registered.some((device) => device.ownerId !== userId)) {
+      throw new ForbiddenException(
+        'Sync batch references a device that is not owned by the caller',
+      );
+    }
+
+    const created = new Set<string>();
+    if (deviceRows.length > 0) {
+      const inserted = await manager
+        .createQueryBuilder()
+        .insert()
+        .into(Device)
+        .values(deviceRows)
+        .orIgnore()
+        .returning(['id'])
+        .execute();
+      for (const row of (inserted.raw ?? []) as { id: string }[]) {
+        created.add(row.id);
+      }
+    }
+
+    // Lock in a deterministic order so concurrent batches over overlapping
+    // devices queue instead of deadlocking.
+    const rows = await manager.find(Device, {
+      where: { id: In(deviceIds) },
+      order: { id: 'ASC' },
+      lock: { mode: 'pessimistic_write' },
+    });
+    const owned = new Set(
+      rows.filter((row) => row.userId === userId).map((row) => row.id),
+    );
+    if (deviceIds.some((deviceId) => !owned.has(deviceId))) {
+      throw new ForbiddenException(
+        'Sync batch references a device that is not owned by the caller',
+      );
+    }
+
+    // PH0-07: a device created by this batch starts the caller's ownership
+    // period now; an existing device must already be in a current period.
+    for (const deviceId of deviceIds) {
+      if (created.has(deviceId)) {
+        await this.ownershipService.openInterval(
+          manager,
+          deviceId,
+          userId,
+          'sync_create',
+        );
+        continue;
+      }
+      const period = await manager.findOne(DeviceOwnership, {
+        where: { deviceId, userId, endedAt: IsNull() },
+      });
+      if (!period) {
+        throw new ForbiddenException(
+          'Sync batch references a device without a current ownership period',
+        );
+      }
+    }
+
+    const recordingIds = (payload.recordingSessions ?? []).map(
+      (session) => session.recordingId,
+    );
+    if (recordingIds.length > 0) {
+      const existing = await manager.find(RecordingSession, {
+        where: { recordingId: In(recordingIds) },
+      });
+      if (existing.some((session) => !owned.has(session.deviceId))) {
+        throw new ForbiddenException(
+          'Sync batch references a recording session owned by another user',
+        );
+      }
     }
   }
 }

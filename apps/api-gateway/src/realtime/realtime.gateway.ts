@@ -21,6 +21,10 @@ import { IotDeviceService } from '../iot-device/iot-device.service';
 import { SyncBatchDto } from '../sync/dto/sync-batch.dto';
 import { SyncService } from '../sync/sync.service';
 import { AlertWriterService } from './alert-writer.service';
+import { UserSocketRegistry } from './user-socket.registry';
+import { MoistureEpisodeService } from '../alert-policy/moisture-episode.service';
+import { AlertDispatchService } from '../alerts/alert-dispatch.service';
+import { DeviceEventService } from './device-event.service';
 
 interface HealthService {
   syncLogs(data: unknown): Observable<unknown>;
@@ -70,7 +74,6 @@ export class RealtimeGateway
   private healthService: HealthService;
   private readonly logger = new Logger(RealtimeGateway.name);
 
-  private readonly userSockets = new Map<number, Set<string>>();
   private readonly deviceSockets = new Map<string, string>();
   private readonly maxClockSkewMs = Number(
     process.env.IOT_MAX_CLOCK_SKEW_MS || 15 * 60 * 1000,
@@ -86,11 +89,16 @@ export class RealtimeGateway
     private readonly vitalRepository: Repository<Vital>,
     @InjectRepository(Alert)
     private readonly alertRepository: Repository<Alert>,
+    private readonly socketRegistry: UserSocketRegistry,
+    private readonly alertDispatch: AlertDispatchService,
+    private readonly moistureEpisodes: MoistureEpisodeService,
+    private readonly deviceEvents: DeviceEventService,
   ) {}
 
-  afterInit() {
+  afterInit(server?: Server) {
     this.healthService =
       this.healthClient.getService<HealthService>('HealthService');
+    this.socketRegistry.attach(server ?? this.server);
   }
 
   private toWsException(error: unknown): WsException {
@@ -165,7 +173,7 @@ export class RealtimeGateway
 
     try {
       const payload = await this.jwtService.verifyAsync<JwtPayload>(token, {
-        // H2: require a real secret; no public 'REMOVED-OLD-PUBLIC-FALLBACK' fallback.
+        // H2: require a real secret; no publicly known fallback.
         secret: process.env.JWT_SECRET,
       });
       const userId = Number(payload.userId);
@@ -173,9 +181,7 @@ export class RealtimeGateway
         return;
       }
 
-      const existing = this.userSockets.get(userId) || new Set<string>();
-      existing.add(client.id);
-      this.userSockets.set(userId, existing);
+      this.socketRegistry.add(userId, client.id);
       const data = client.data as RealtimeSocketData;
       data.userId = userId;
     } catch {
@@ -187,13 +193,7 @@ export class RealtimeGateway
     const data = client.data as RealtimeSocketData;
     const userId = Number(data.userId);
     if (Number.isFinite(userId)) {
-      const set = this.userSockets.get(userId);
-      if (set) {
-        set.delete(client.id);
-        if (set.size === 0) {
-          this.userSockets.delete(userId);
-        }
-      }
+      this.socketRegistry.remove(userId, client.id);
     }
 
     for (const [deviceId, socketId] of this.deviceSockets.entries()) {
@@ -233,6 +233,21 @@ export class RealtimeGateway
       device_id: result.deviceId,
       owner_id: result.ownerId,
     };
+  }
+
+  /**
+   * AR-9: a durable fall/SOS event from the gateway outbox. Always answers
+   * with a contract ack (device_event_ack v1) and never throws: an exception
+   * would reach the gateway as an `exception` event, which it treats as auth
+   * loss.
+   */
+  @SubscribeMessage('device_event')
+  handleDeviceEvent(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: unknown,
+  ) {
+    const data = client.data as RealtimeSocketData;
+    return this.deviceEvents.ingest(data.deviceId || undefined, body);
   }
 
   @SubscribeMessage('device_data')
@@ -282,8 +297,22 @@ export class RealtimeGateway
       this.deviceSockets.set(deviceId, client.id);
     }
 
+    // GAP-001 revocation: the owner captured at device_auth may be stale
+    // (device unclaimed or re-claimed since). Re-resolve before routing data.
+    const ownership =
+      await this.iotDeviceService.resolveCurrentOwnership(deviceId);
+    if (ownership === null) {
+      // Keep the socket's authenticated device identity: ownership is
+      // re-resolved on every batch, so a later re-claim resumes without re-auth.
+      throw new WsException('Device not claimed');
+    }
+    if (ownership.ownerId !== ownerId) {
+      ownerId = ownership.ownerId;
+      data.ownerId = ownership.ownerId;
+    }
+
     const now = Date.now();
-    const grpcLogs: NormalizedGrpcLog[] = logs.map((log, index) => {
+    const mappedLogs: NormalizedGrpcLog[] = logs.map((log, index) => {
       const ts = this.toUnixMs(
         (log.timestamp as string | number | undefined) ??
           (log.ts as string | number | undefined) ??
@@ -314,6 +343,25 @@ export class RealtimeGateway
         timestamp: ts,
       };
     });
+
+    // PH0-07: readings observed before the current owner's period began (e.g.
+    // a gateway buffer replayed after a transfer) belong to nobody we can
+    // prove; they are acknowledged but not attributed to the new owner.
+    const sinceMs = ownership.since.getTime();
+    const grpcLogs = mappedLogs.filter((log) => log.timestamp >= sinceMs);
+    const droppedBeforeOwnership = mappedLogs.length - grpcLogs.length;
+    if (grpcLogs.length === 0) {
+      return {
+        success: true,
+        device_id: deviceId,
+        synced: {
+          success: true,
+          message: 'No logs within the current ownership period',
+          synced_count: 0,
+        },
+        dropped_before_ownership: droppedBeforeOwnership,
+      };
+    }
 
     const realtimeOnly = Boolean(body.realtime_only);
     const result = realtimeOnly
@@ -356,15 +404,40 @@ export class RealtimeGateway
     }
 
     // Write all sensor-driven alerts for the batch via one batched insert.
+    // A failure must not be acked as success: a strict gateway then buffers and
+    // resends, and deterministic alert ids make the resend idempotent.
+    let alertWriteFailed = false;
     try {
-      await this.alertWriterService.writeAlertsForLogs(
+      const inserted = await this.alertWriterService.writeAlertsForLogs(
         deviceId,
         grpcLogs,
         'iot_live',
         this.alertRepository,
       );
+      // AR-2/AR-5: the insert has committed (autocommit); hand the newly
+      // created rows to the single dispatch path. Not awaited by the ack.
+      if (inserted.length > 0) {
+        void this.alertDispatch.kick(inserted.map((alert) => alert.id));
+      }
     } catch (err) {
+      alertWriteFailed = true;
       this.logger.warn(`Failed to save realtime alerts for device ${deviceId}: ${err}`);
+    }
+
+    // AR-3: moisture is evaluated as episodes (one alert per wet condition).
+    try {
+      if (this.moistureEpisodes.enabled) {
+        const opened = await this.moistureEpisodes.process(
+          deviceId,
+          grpcLogs.map((log) => ({ ts: log.timestamp, moisture: log.moisture })),
+        );
+        if (opened.length > 0) {
+          void this.alertDispatch.kick(opened.map((alert) => alert.id));
+        }
+      }
+    } catch (err) {
+      alertWriteFailed = true;
+      this.logger.warn(`Failed to evaluate moisture episodes for device ${deviceId}: ${err}`);
     }
 
     // Emit a summary instead of echoing the full log array back out — large
@@ -384,21 +457,26 @@ export class RealtimeGateway
       ingested_at: new Date().toISOString(),
     });
 
+    if (alertWriteFailed) {
+      return {
+        success: false,
+        retryable: true,
+        error: 'alert_write_failed',
+        device_id: deviceId,
+      };
+    }
+
     return {
       success: true,
       device_id: deviceId,
       synced: result,
+      ...(droppedBeforeOwnership > 0
+        ? { dropped_before_ownership: droppedBeforeOwnership }
+        : {}),
     };
   }
 
   emitToUser(userId: number, event: string, data: unknown) {
-    const sockets = this.userSockets.get(userId);
-    if (!sockets || sockets.size === 0) {
-      return;
-    }
-
-    for (const socketId of sockets) {
-      this.server.to(socketId).emit(event, data);
-    }
+    this.socketRegistry.emitToUser(userId, event, data);
   }
 }

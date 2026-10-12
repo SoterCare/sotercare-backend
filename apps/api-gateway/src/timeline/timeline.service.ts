@@ -1,13 +1,28 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, FindOptionsWhere, In, Repository } from 'typeorm';
-import { Alert, AlertType, Device, Vital } from '../database/entities';
+import {
+  Between,
+  FindOptionsWhere,
+  MoreThanOrEqual,
+  Repository,
+} from 'typeorm';
+import {
+  Alert,
+  AlertAction,
+  AlertActionSource,
+  AlertType,
+  Device,
+  Vital,
+} from '../database/entities';
 import { DismissTimelineItemDto } from './dto/dismiss-item.dto';
 import { QueryDateOptionsDto } from './dto/query-date-options.dto';
 import { QueryTimelineEventsDto } from './dto/query-events.dto';
 import { QueryTimelineStatsDto } from './dto/query-stats.dto';
 import { QueryTimelineVitalsDto } from './dto/query-vitals.dto';
 import { RestoreTimelineItemDto } from './dto/restore-item.dto';
+import { requireDeviceId } from '../common/device-scope';
+import { OwnershipService } from '../ownership/ownership.service';
+import { AlertEventsPublisher } from '../realtime/alert-events.publisher';
 
 // Bound list endpoints — these previously returned every matching row.
 const TIMELINE_MAX_EVENTS = 500;
@@ -21,10 +36,12 @@ export class TimelineService {
     private readonly vitalRepository: Repository<Vital>,
     @InjectRepository(Alert)
     private readonly alertRepository: Repository<Alert>,
+    private readonly ownershipService: OwnershipService,
+    private readonly alertEvents?: AlertEventsPublisher,
   ) {}
 
   async getVitalsTimeline(userId: number, query: QueryTimelineVitalsDto) {
-    await this.ensureDeviceOwnership(userId, query.deviceId);
+    const since = await this.ensureDeviceOwnership(userId, query.deviceId);
     const tz = Math.round(Number(query.tzOffsetMinutes ?? 0));
     const { start, end } = this.getRange(
       query.period,
@@ -38,7 +55,13 @@ export class TimelineService {
     // Aggregate in SQL (GROUP BY time bucket + AVG/COUNT) instead of loading
     // every raw row into JS — a month of 1Hz data is ~2.6M rows otherwise.
     const bucketUnit = query.period === 'day' ? 'hour' : 'day';
-    const buckets = await this.queryVitalBuckets(query, start, end, bucketUnit);
+    const buckets = await this.queryVitalBuckets(
+      query,
+      start,
+      end,
+      bucketUnit,
+      since,
+    );
 
     const points =
       query.period === 'day'
@@ -58,6 +81,7 @@ export class TimelineService {
     start: Date,
     end: Date,
     unit: 'hour' | 'day',
+    since: Date,
   ): Promise<{ bucket: Date | string | number; value: string | number | null }[]> {
     // For day view: bucket by local hour (0-23) relative to the local midnight
     // represented by `start`. This gives correct local-time hour labels
@@ -72,6 +96,8 @@ export class TimelineService {
       .select(bucketExpr, 'bucket')
       .where('v."deviceId" = :deviceId', { deviceId: query.deviceId })
       .andWhere('v.timestamp BETWEEN :start AND :end')
+      // PH0-07: only rows ingested during the caller's ownership period.
+      .andWhere('v."createdAt" >= :since', { since: since.toISOString() })
       .setParameter('start', start.toISOString())
       .setParameter('end', end.toISOString())
       .groupBy(bucketExpr)
@@ -155,7 +181,7 @@ export class TimelineService {
   }
 
   async getEvents(userId: number, query: QueryTimelineEventsDto) {
-    await this.ensureDeviceOwnership(userId, query.deviceId);
+    const since = await this.ensureDeviceOwnership(userId, query.deviceId);
     const tz = Math.round(Number(query.tzOffsetMinutes ?? 0));
     const { start, end } = this.getRange(
       query.period,
@@ -171,6 +197,7 @@ export class TimelineService {
       timestamp: Between(start, end),
       isDismissed: false,
       isAttended: true,
+      createdAt: MoreThanOrEqual(since),
     };
 
     if (query.filter && query.filter !== 'all') {
@@ -195,7 +222,7 @@ export class TimelineService {
   }
 
   async getStats(userId: number, query: QueryTimelineStatsDto) {
-    await this.ensureDeviceOwnership(userId, query.deviceId);
+    const since = await this.ensureDeviceOwnership(userId, query.deviceId);
     const tz = Math.round(Number(query.tzOffsetMinutes ?? 0));
     const { start, end } = this.getRange(
       query.period,
@@ -214,6 +241,7 @@ export class TimelineService {
         .addSelect('COUNT(*)', 'count')
         .where('a."deviceId" = :deviceId', { deviceId: query.deviceId })
         .andWhere('a.timestamp BETWEEN :start AND :end', { start, end })
+        .andWhere('a."createdAt" >= :since', { since })
         .groupBy('a.type')
         .getRawMany();
 
@@ -253,7 +281,7 @@ export class TimelineService {
   }
 
   async getDateOptions(userId: number, query: QueryDateOptionsDto) {
-    await this.ensureDeviceOwnership(userId, query.deviceId);
+    const since = await this.ensureDeviceOwnership(userId, query.deviceId);
     const tz = Math.round(Number(query.tzOffsetMinutes ?? 0));
 
     // Group by local calendar day by shifting the UTC timestamp by the device
@@ -265,6 +293,7 @@ export class TimelineService {
         'date',
       )
       .where('v."deviceId" = :deviceId', { deviceId: query.deviceId })
+      .andWhere('v."createdAt" >= :since', { since })
       .setParameter('tz', tz)
       .orderBy('date', 'DESC')
       .getRawMany();
@@ -273,18 +302,17 @@ export class TimelineService {
   }
 
   async getDismissed(userId: number) {
-    const devices = await this.deviceRepository.find({ where: { userId } });
-    const deviceIds = devices.map((device) => device.id);
-
-    if (deviceIds.length === 0) {
+    const windows = await this.currentWindows(userId);
+    if (windows.length === 0) {
       return { items: [] };
     }
 
     const items = await this.alertRepository.find({
-      where: {
-        deviceId: In(deviceIds),
+      where: windows.map(([deviceId, since]) => ({
+        deviceId,
         isDismissed: true,
-      },
+        createdAt: MoreThanOrEqual(since),
+      })),
       order: { dismissedAt: 'DESC' },
       take: TIMELINE_MAX_EVENTS,
     });
@@ -299,22 +327,65 @@ export class TimelineService {
     };
   }
 
-  async restore(userId: number, body: RestoreTimelineItemDto) {
-    const alert = await this.getOwnedAlert(userId, body.id);
-    alert.isDismissed = false;
-    alert.dismissedAt = null;
-    await this.alertRepository.save(alert);
-
+  async restore(
+    userId: number,
+    body: RestoreTimelineItemDto,
+    source: AlertActionSource = 'unknown',
+  ) {
+    await this.setDismissed(userId, body.id, false, source);
     return { restoredId: body.id };
   }
 
-  async dismiss(userId: number, body: DismissTimelineItemDto) {
-    const alert = await this.getOwnedAlert(userId, body.id);
-    alert.isDismissed = true;
-    alert.dismissedAt = new Date();
-    await this.alertRepository.save(alert);
-
+  async dismiss(
+    userId: number,
+    body: DismissTimelineItemDto,
+    source: AlertActionSource = 'unknown',
+  ) {
+    await this.setDismissed(userId, body.id, true, source);
     return { dismissedId: body.id };
+  }
+
+  /**
+   * AR-4: conditional state change plus one audit row in one transaction. A
+   * repeat of the same action changes nothing, so it is neither audited nor
+   * re-published.
+   */
+  private async setDismissed(
+    userId: number,
+    alertId: string,
+    dismissed: boolean,
+    source: AlertActionSource,
+  ) {
+    const alert = await this.getOwnedAlert(userId, alertId);
+    const dismissedAt = dismissed ? new Date() : null;
+    const changed = await this.alertRepository.manager.transaction(
+      async (manager) => {
+        const result = await manager.update(
+          Alert,
+          { id: alert.id, isDismissed: !dismissed },
+          { isDismissed: dismissed, dismissedAt },
+        );
+        if (!result.affected) return false;
+        await manager.insert(AlertAction, {
+          alertId: alert.id,
+          userId,
+          action: dismissed ? 'dismissed' : 'restored',
+          source,
+          previousState: dismissed ? 'active' : 'dismissed',
+          newState: dismissed ? 'dismissed' : 'active',
+          reason: null,
+        });
+        return true;
+      },
+    );
+    if (!changed) return;
+    alert.isDismissed = dismissed;
+    alert.dismissedAt = dismissedAt;
+    await this.alertEvents?.publishUpdated(
+      alert,
+      dismissed ? 'dismissed' : 'restored',
+      userId,
+    );
   }
 
   private getYAxisMeta(metric: QueryTimelineVitalsDto['metric']) {
@@ -396,18 +467,38 @@ export class TimelineService {
     return { start, end };
   }
 
-  private async ensureDeviceOwnership(userId: number, deviceId: string) {
+  /**
+   * Current ownership of the device by the caller, returned as the start of
+   * their ownership period (PH0-07). History before it is not visible.
+   */
+  private async ensureDeviceOwnership(
+    userId: number,
+    deviceId: string,
+  ): Promise<Date> {
+    requireDeviceId(deviceId);
     const device = await this.deviceRepository.findOne({
       where: { id: deviceId, userId },
     });
+    const since = device
+      ? await this.ownershipService.currentWindow(userId, deviceId)
+      : null;
 
-    if (!device) {
+    if (!device || !since) {
       throw new NotFoundException(
         'Device not found or does not belong to user',
       );
     }
 
-    return device;
+    return since;
+  }
+
+  /** [deviceId, since] for every device the caller currently owns. */
+  private async currentWindows(userId: number): Promise<[string, Date][]> {
+    const devices = await this.deviceRepository.find({ where: { userId } });
+    const windows = await this.ownershipService.currentWindows(userId);
+    return devices
+      .filter((device) => windows.has(device.id))
+      .map((device) => [device.id, windows.get(device.id) as Date]);
   }
 
   private async getOwnedAlert(userId: number, alertId: string) {
@@ -418,7 +509,10 @@ export class TimelineService {
       throw new NotFoundException('Timeline item not found');
     }
 
-    await this.ensureDeviceOwnership(userId, alert.deviceId);
+    const since = await this.ensureDeviceOwnership(userId, alert.deviceId);
+    if (alert.createdAt < since) {
+      throw new NotFoundException('Timeline item not found');
+    }
     return alert;
   }
 

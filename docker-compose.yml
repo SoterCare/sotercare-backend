@@ -9,7 +9,8 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: auth_db
     ports:
-      - "5432:5432"
+      # Local only: never expose the dev database (default credentials) beyond this machine.
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -17,7 +18,7 @@ services:
     image: redis:7
     container_name: auth-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
 
@@ -29,25 +30,27 @@ services:
     env_file:
       - .env
     ports:
+      # Only the public HTTP/Socket.IO API is published. The gRPC services
+      # (50051-50054) are internal: they have no authentication and trust the
+      # caller-supplied user id, and the gateway reaches them on localhost
+      # inside this container (GAP-013).
       - "3000:3000"
-      - "50051:50051"
-      - "50052:50052"
-      - "50053:50053"
-      # M6: health-service runs on 50054 — expose it too (was previously omitted).
-      - "50054:50054"
     environment:
       - DB_HOST=postgres
       - REDIS_HOST=redis
       # All services are co-located in this single image, so the gateway reaches
       # each microservice on localhost at its gRPC port.
-      - AUTH_SERVICE_URL=localhost:50051
-      - EMAIL_SERVICE_URL=localhost:50052
+      - AUTH_SERVICE_URL=127.0.0.1:50051
+      - EMAIL_SERVICE_URL=127.0.0.1:50052
       - SUMMARY_GRPC_URL=localhost:50053
-      - HEALTH_SERVICE_URL=localhost:50054
-      - AUTH_GRPC_URL=0.0.0.0:50051
-      - EMAIL_GRPC_URL=0.0.0.0:50052
+      - HEALTH_SERVICE_URL=127.0.0.1:50054
+      # Bind the internal gRPC servers to loopback (the ai-summary-service binds
+      # [::] in code; it is still unreachable from the host because 50053 is
+      # not published).
+      - AUTH_GRPC_URL=127.0.0.1:50051
+      - EMAIL_GRPC_URL=127.0.0.1:50052
       - SUMMARY_GRPC_PORT=50053
-      - HEALTH_GRPC_URL=0.0.0.0:50054
+      - HEALTH_GRPC_URL=127.0.0.1:50054
     depends_on:
       - postgres
       - redis

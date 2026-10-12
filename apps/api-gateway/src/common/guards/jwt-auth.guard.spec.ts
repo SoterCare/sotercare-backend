@@ -37,7 +37,7 @@ describe('JwtAuthGuard', () => {
 
     const token = jwt.sign(
       { userId: 1, email: 'test@example.com', name: 'Test User' },
-      process.env.JWT_SECRET || 'REMOVED-OLD-PUBLIC-FALLBACK',
+      process.env.JWT_SECRET as string,
     );
 
     await request(app.getHttpServer())

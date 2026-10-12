@@ -1,7 +1,18 @@
 const { io } = require("socket.io-client");
 const http = require("http");
 
-const JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIyIiwic3ViIjoyLCJlbWFpbCI6ImpvaG5AZXhhbXBsZS5jb20iLCJuYW1lIjoiSm9obiBEb2UiLCJpYXQiOjE3NzQwMDkzNjQsImV4cCI6MTc4MTc4NTM2NH0.qIKWP99qOD2onkfYuQBv55C6FIJbMs9BDcY0f0jdWQU";
+// Credentials come from the environment -- never commit them.
+//   SOTERCARE_TEST_JWT   (required) user JWT issued by your LOCAL backend (alias USER_TOKEN)
+//   SOTERCARE_DEVICE_KEY (required) device key registered on your LOCAL backend (alias DEVICE_KEY)
+//   SOTERCARE_DEVICE_ID  (optional) default pi-ffc585939c23 (alias DEVICE_ID)
+const JWT = process.env.SOTERCARE_TEST_JWT || process.env.USER_TOKEN;
+const DEVICE_ID = process.env.SOTERCARE_DEVICE_ID || process.env.DEVICE_ID || "pi-ffc585939c23";
+const DEVICE_KEY = process.env.SOTERCARE_DEVICE_KEY || process.env.DEVICE_KEY;
+
+if (!JWT || !DEVICE_KEY) {
+  console.error("Missing credentials: set SOTERCARE_TEST_JWT and SOTERCARE_DEVICE_KEY in your shell. Never commit them.");
+  process.exit(1);
+}
 
 const socket = io("http://localhost:3000/realtime");
 
@@ -53,8 +64,8 @@ socket.on("connect", () => {
   console.log("✅ Connected to LOCAL backend");
 
   socket.emit("device_auth", {
-    device_id: "pi-ffc585939c23",
-    device_key: "TW3DNioQHndfvbcIyVex2KqBCJFwjZuOpPsEYa15",
+    device_id: DEVICE_ID,
+    device_key: DEVICE_KEY,
     timestamp: Date.now(),
   }, (authAck) => {
     if (authAck && authAck.status === "error") {
