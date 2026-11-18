@@ -367,6 +367,7 @@ Spec §7 (local credential), §10 (shadows).
   - one builder per shadow, returning the contracts shadow `content`.
 
 - [ ] **Step 1:** Write the tests.
+  - `service shadow carries gatewayRole per gateway thing`: the active unit gets `active`, any other enrolled unit `standby` (contracts C-29).
   - `local credential claims and 30 day ttl, never for family`.
   - `revoked jti appears in keys shadow until expiry`.
   - `key rotation publishes next key 24h early`.
@@ -564,6 +565,7 @@ Spec §16.4–§16.5.
 - Produces: `FamilyLinks.unlink(userId, residentId, mode)`, `.deactivateAccount(userId)`, `.activeLink(userId, residentId) -> Link | null` (Task 31); the event `family.link_changed {userId, residentId}` on the tenant Redis channel.
 
 - [ ] **Step 1:** Write the tests: `family create links residents and never issues local credential`, `unlink read_only freezes with removeAt from setting`, `unlink now removes and deactivates when no active link left`, `account linked to another active resident keeps that access`, `nightly job removes frozen links at removeAt`, `password reset notice shown once on me`.
+  - `me gateway includes staffSsids from devices_network setting` (contracts C-32); `family account email and weeklyEmailOptIn stored and returned` (C-31).
 - [ ] **Step 2:** Run `npx jest test/accounts/family`. Expected: FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Run the same command. Expected: PASS.
@@ -591,6 +593,7 @@ Spec §18.1.
 - Produces: `Settings.get(group)`, `Settings.patch(group, patch, actor, via)`; emits `tenant.settings_changed`; calls `ShadowPublisher` and the schedulers' `reschedule(tenantId)`.
 
 - [ ] **Step 1:** Write the tests: `each group validates against its schema`, `wifi change bumps wifiGen in bands shadow`, `lte failover goes to service shadow`, `shift margin goes to roster`, `family_app and agents changes emit tenant.settings_changed`, `time zone change requires policy`, `every field change writes setting_change and audit`.
+  - `devices_network staffSsids reaches me.gateway` (C-32).
 - [ ] **Step 2:** Run `npx jest test/settings`. Expected: FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Run the same command. Expected: PASS.
