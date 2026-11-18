@@ -1,6 +1,15 @@
-# sotercare-backend: spec 1 (Tier 2 core + safety core)
+# sotercare-backend: full spec, Part 1 (platform core and safety)
 
-Status: **approved design, 18 Nov 2026** (rev 1). Plan: [`plan.md`](plan.md). Scope option **A** (approved 18 Nov): the Tier 2 backend core (`b2b-plan/18` §0.3) plus the never-cut safety core. Every other module (medications, Medical records, staff / family accounts, settings and policy sign-off, family API and live view, billing, the rest of `/v1/ops`, ARIA) is **spec 2**, written once T2-1 is green on 24 Nov.
+Status: **approved design** (rev 2, 19 Nov 2026: the product owner asked for the **whole backend in one spec**, so the modules rev 1 left for a "spec 2" are now Parts 2 and 3). Plan: [`plan.md`](plan.md) (Tasks 0–41).
+
+The spec has three parts, numbered continuously:
+| Part | File | Sections |
+|---|---|---|
+| **1. Platform core and safety** | this file | §1–§15: tenancy, auth, ingest + alert mirror, bands + assignment mirror, shadows, push, internal API, agent outputs, seed, testing |
+| **2. People and care** | [`spec-part2-people-and-care.md`](spec-part2-people-and-care.md) | §16–§25: accounts and identity, station PIN and readiness, settings and alert policy, layout and residents, shifts / availability / notifications, medications, Medical records, voice notes, audit / exports / data requests / retention, live view and metrics |
+| **3. Family, AI, money and ops** | [`spec-part3-family-ai-money-ops.md`](spec-part3-family-ai-money-ops.md) | §26–§35: family API and live view, family e-mail, ARIA, the rest of the agent-output plumbing, billing and suspension, the ops API, support access, testing, open items |
+
+Plan order follows the tiers (`b2b-plan/18` §0): the Tier 2 core (Part 1) is dated first, then the safety core, then Parts 2 and 3.
 
 **Sources** (when they disagree, `b2b-plan/19` wins):
 - `b2b-plan`: 03 (tenancy), 04 §5–6 (local credential, roles), 05 §3 and §7 (bands, pairing, replacement), 07 §2 and §5 (timers, cloud push), 11 §8, 14 §1–8 (every interface);
@@ -20,22 +29,22 @@ The backend is the platform's cloud core: one database per care home behind one 
    - `gateway_offline`.
 
    These are never cut (D-116). If capacity is short they're late, not simplified.
+3. **Everything else the apps and consoles need** (Parts 2 and 3): accounts, settings and policy sign-off, residents, shifts, medications and Medical records, the family API and live view, ARIA, billing and suspension, and the ops console's `/v1/ops`.
 
 ## 2. Goals, non-goals, anti-goals
-**Goals:** everything in §5–§13, and these acceptance scenarios (`18` §9) green on `dev`:
+**Goals:** everything in §5–§35, and these acceptance scenarios (`18` §9) green on `dev` / `staging`:
 - **6:** tenant isolation, for the internal API, REST and the WebSocket rooms in this spec;
 - **21:** migration failure;
 - **41:** internal API guard;
 - **25:** pairing mirror, cloud side;
-- **the safety path:** a gateway record → mirror → push → ack.
+- **the safety path:** a gateway record → mirror → push → ack;
+- **Parts 2 and 3** (backend side): 3, 4, 5, 7, 8, 9, 12, 13, 16, 17, 19, 20, 22, 23, 24, 26, 28, 30, 31, 32, 33 (mapped to tasks in §33).
 
-**Non-goals here (spec 2):**
-- staff / family account admin (the seed creates accounts);
-- settings and policy sign-off endpoints (the seed signs off a default policy);
-- shift administration (the seed loads shifts);
-- medications, Medical records uploads, the family API and live view, billing and suspension timeline, the rest of `/v1/ops`, ARIA, voice notes, dashboards / metrics UI endpoints, Step Functions provisioning (`sotercare-infra`).
-
-The internal API answers `402 tenant_suspended` from a `service.state` field that the seed and tests can set; the billing timeline that sets it comes in spec 2.
+**Non-goals:**
+- AWS resources and the Step Functions workflows themselves (`sotercare-infra`); the backend starts them and records their progress (§31);
+- the agents, ARIA's answers and the detectors (`sotercare-iit`); the backend is their data, token and delivery layer (§11, §28, §29);
+- card payments beyond PayHere (a `PaymentProvider` interface leaves room for Stripe, §30);
+- languages other than English at launch (translation-ready keys only, `09` §6).
 
 **Anti-goals (a failure even if it works):**
 - the cloud deriving a safety alert from telemetry (D-08; only `gateway_offline`);
@@ -143,7 +152,7 @@ test/support/  (kept from the old repo: in-memory helpers, fake push, fixtures) 
 4. create the Cognito pool + clients (dev) or register with the local JWKS issuer (local);
 5. create two `facility_manager` accounts.
 
-It's exposed as the CLI `tenant:create` and `POST /v1/ops/tenants` (ops pool). Step Functions and KMS / RDS creation are `sotercare-infra`'s job.
+It's exposed as the CLI `tenant:create` and, in `local` / `dev`, behind `POST /v1/ops/tenants` (ops pool). In `staging` / `prod` the same endpoint starts infra's provisioning workflow (§31.2); KMS / RDS creation is `sotercare-infra`'s job.
 
 ## 7. Auth
 - **Cognito guard:** verifies signature, expiry, `token_use` and `client_id` against the pool the issuer names. The JWKS is cached per pool. **The tenant comes from issuer → pool → tenant**, never a claim.
@@ -257,7 +266,7 @@ It's exposed as the CLI `tenant:create` and `POST /v1/ops/tenants` (ops pool). S
   - metrics / coverage; shifts;
   - **staff availability** (staff pseudonyms, role, wards, shifts this week, night eligibility). This is a contracts addition needed by the Roster Coordinator, §15.
 
-  `medication_counts` and family-safe facts are spec 2.
+  - **`medication_counts`** (counts only, `coordinator`, §21.8) and **family facts** (`GET /family/residents/{id}/facts`, the family-card facts for ARIA family and the weekly brief, §26.3).
 - **No medication field** in any response except `medication_counts` (none here). **No Medical records item except through the care-plan document schema.** Both are checked by a response-shape test over every operation (Task 16), in addition to the contracts CI rule.
 - **Writes:**
   - `POST /outputs`: upsert by `dedupeKey`;
@@ -270,7 +279,7 @@ It's exposed as the CLI `tenant:create` and `POST /v1/ops/tenants` (ops pool). S
 - **Outbox → SQS `domain-events`:**
   - the `outbox` table is written in the same transaction as the change; the publisher uses `FOR UPDATE SKIP LOCKED` (the kept `alert-dispatch` pattern) and delivers at least once with `eventId`;
   - events in this spec: `alert.resolved`, `shift.starting`, `shift.ending`, `shift.cancelled`, `coverage.gap`, `band.swapped`, `resident.moved`, `resident.left`, `document.uploaded` (`care_plan` only), `proposal.decided`, `export.ready`;
-  - **`schedule_event`** comes from each facility's settings and time zone: `shift.ending` at shift end − handover minutes, the 15-min device tasks and the daily care log. Further schedules are spec 2.
+  - **`schedule_event`** comes from each facility's settings and time zone: `shift.ending` at shift end − handover minutes, the 15-min device tasks and the daily care log first (T2-1); the full set (morning brief, weekly roster, weekly review pack, family weekly brief, monthly report, Wi-Fi dead-zone report) in §29.3.
 - **Parquet export:** a nightly per-tenant pseudonymised export of the tables and columns in contracts `schemas/v1/exports/` to the tenant S3 prefix, then `export.ready`. Medication and Medical records tables are never exported.
 
 ## 12. `/v1` agent outputs and realtime
@@ -282,9 +291,10 @@ It's exposed as the CLI `tenant:create` and `POST /v1/ops/tenants` (ops pool). S
 
   Responses are filtered to the caller's wards.
 - **Socket.IO:**
-  - **Rooms** `facility:{tenantId}`, `staff:{tenantId}`, `user:{tenantId}:{userId}`, joined **server-side only** from the verified token. Family sockets are refused in this spec (the family room is spec 2).
-  - **Events here:** `alert.event`, `alert.escalated`, `band.status`, `band.assignment`, `gateway.status`, `gateway.shadow_applied`, `tenant.service`, `roster.updated`, `output.published`, `output.updated`, `proposal.created`, `proposal.decided`.
+  - **Rooms** `facility:{tenantId}`, `staff:{tenantId}`, `user:{tenantId}:{userId}`, joined **server-side only** from the verified token; family sockets join only `family:{tenantId}:{residentId}` after `family.watch` (§26.4).
+  - **Events in Part 1:** `alert.event`, `alert.escalated`, `band.status`, `band.assignment`, `gateway.status`, `gateway.shadow_applied`, `tenant.service`, `roster.updated`, `output.published`, `output.updated`, `proposal.created`, `proposal.decided`.
   - **Revocation:** sockets are dropped on sign-out / deactivation (the kept revocation registry).
+  - Parts 2 and 3 add `resident.status`, `staff.availability`, `notification.created`, `announcement`, `dose.updated` and `family.live` (contracts §7.5).
 
 ## 13. Seed tool (`tools/seed`)
 - **`seed:demo`** creates tenant `demo`:
@@ -327,7 +337,7 @@ It's exposed as the CLI `tenant:create` and `POST /v1/ops/tenants` (ops pool). S
 ## 15. Open items and calls (check while reading)
 1. **`staff_availability`** (D-139, contracts C-28): `GET /internal/v1/staff/availability`, Roster Coordinator only, pseudonymous `staffKey`; the backend resolves `staffKey` → user only when creating cover requests.
 2. **Agents' pseudonyms:** the internal API returns `residentNo` (and `residentId`), never names. The pseudonym-resolve tool maps both ways for the backend's own render. Call: `residentNo` is the agents' resident key, as in the iit file adapter.
-3. **Family sockets** are refused until spec 2 adds the family room.
+3. **Family sockets** join only their resident's family room (§26).
 4. **Escalation of incident proposals after 24 h** uses a BullMQ delayed job keyed on the proposal, cancelled on decision.
-5. **`POST /v1/ops/tenants`** here is local / dev provisioning only. The production path (Step Functions) is `sotercare-infra` plus spec 2's ops module.
+5. **`POST /v1/ops/tenants`:** in `local` / `dev` it runs `ProvisioningService` (§6); in `staging` / `prod` it starts the infra provisioning workflow and tracks it (§31).
 6. **Old code import (Task 0)** uses `git filter-repo` on a fresh clone of the old `back-end` at `642c642`, keeping history, with trailers stripped by `--message-callback`. It's merged with `--allow-unrelated-histories` into `sotercare-backend` `main` on a branch, then fast-forwarded. **No force-push.**
