@@ -455,6 +455,7 @@ Spec §12.
   - the REST routes in spec §12.
 
 - [ ] **Step 1:** Write the tests.
+  - `ws ticket is single use expires in 60 s and joins the same rooms` (contracts C-33).
   - `outputs filtered to caller wards`.
   - `proposal approve emits proposal.decided and outbox event`.
   - `band_reassignment approve changes nothing`.

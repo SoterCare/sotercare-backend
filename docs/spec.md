@@ -291,6 +291,7 @@ It's exposed as the CLI `tenant:create` and, in `local` / `dev`, behind `POST /v
 
   Responses are filtered to the caller's wards.
 - **Socket.IO:**
+  - **Auth:** `auth.token` (a Cognito access token) or `auth.ticket` from `POST /v1/ws-tickets` (contracts C-33: Redis `t:{tenantId}:wsticket:{ticket}` → `{userId, facilityId}`, TTL 60 s, deleted on first use; the console BFF uses it).
   - **Rooms** `facility:{tenantId}`, `staff:{tenantId}`, `user:{tenantId}:{userId}`, joined **server-side only** from the verified token; family sockets join only `family:{tenantId}:{residentId}` after `family.watch` (§26.4).
   - **Events in Part 1:** `alert.event`, `alert.escalated`, `band.status`, `band.assignment`, `gateway.status`, `gateway.shadow_applied`, `tenant.service`, `roster.updated`, `output.published`, `output.updated`, `proposal.created`, `proposal.decided`.
   - **Revocation:** sockets are dropped on sign-out / deactivation (the kept revocation registry).
