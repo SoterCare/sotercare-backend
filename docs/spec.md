@@ -67,7 +67,7 @@ The backend is the platform's cloud core: one database per care home behind one 
 - **Contracts:** every payload, shadow, API body and enum comes from `@sotercare/contracts` (pinned exact version). If v1.0.0 isn't on GitHub Packages by 21 Nov, depend on `github:SoterCare/sotercare-contracts#<commit>` until it is; never copy types. Contract tests run in CI against the pinned version; the OpenAPI and AsyncAPI documents are validated against the real responses (Task 16).
 - **Region:** `ap-south-1`.
 - **Environments:**
-  - `local`: docker compose with Postgres, Redis and LocalStack (SQS, S3, SNS) from `sotercare-infra/local`; the local JWKS issuer; the fake IoT publisher and fake push provider;
+  - `local`: docker compose with Postgres, Redis and LocalStack (SQS, S3, SNS) from `sotercare-infra/local`; the local JWKS issuer; the fake IoT publisher (it writes `record_ack`s, shadows and commands to the LocalStack queue `sc-local-gw-acks`, which `gw-sim sqs` reads) and the fake push provider;
   - `test`: the same, plus in-process fakes;
   - `dev`: the AWS account, real Cognito, IoT Core, SNS.
 - **Clock:** one injectable `Clock` for every timer and date.
