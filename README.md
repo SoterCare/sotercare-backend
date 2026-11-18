@@ -9,11 +9,13 @@ Plan: `../b2b-plan/` (v2). Start with `02-System-Architecture.md`, `03-Tenancy-a
 ## Owns
 - **Tenancy (silo, D-31):** one RDS database per facility plus a control DB. The tenant is derived from the token issuer, and each request uses that tenant's DB pool only (`03` §3). Per-tenant migrations with expand-only releases (`03` §5).
 - **Identity (`04`):** a Cognito pool per tenant and an ops pool; `name@tenantId` usernames. Managers create staff and family accounts with a **temporary password** and print a login slip; managers reset passwords; account recovery through the authorised contact. Roles `caregiver`, `ward_head`, `facility_manager`, `org_admin`, `family`; org admins work one facility per request. Audit to `audit.events`.
-- **Facility data:** wards, rooms, beds, residents; per-resident alert bar, bedtime / wake, pad type, Pause, discharge; facility settings and versioned alert policy with manager sign-off (`07` §3, §8; `09`).
+- **Facility data:** wards, rooms, beds, residents (each with a short **`residentNo`**, e.g. `R-0012`, D-99); per-resident alert bar, bedtime / wake, pad type, Pause, discharge; facility settings and versioned alert policy with manager sign-off (`07` §3, §8; `09`).
 - **Shifts (`08`):** templates, patterns, publish; recipients = everyone on a published shift now ± margin; availability for display only (purged after 48 h); shift notifications, roster-gap warning. No attendance tracking.
 - **Alert mirror (`07`, `14` §4):** SQS ingest of every gateway record (live queues and a separate `backlog` queue), idempotent on `recordId`; `record_ack` **after commit**. The gateway runs every alert timer: the backend turns its re-push and escalation records into cloud push via SNS → APNs / FCM (collapse ID = `alertId`, fresh records only) and console banners. Cloud claim forwarding (`cmd/claim`, provisional after 3 s); provisional-claim timers and `gateway_offline` are the only cloud-run timers.
 - **Gateway feeds:** the named shadows `roster`, `bands`, `residents`, `policy`, `keys`, `service`; the device-bound local credential (Ed25519, 30 days); band keys and provisioning bundles sealed under the band's factory key (`06` §4, §6); presigned URLs for sensor windows.
-- **Dashboards and family:** live floor, metrics, the family API (`10` §6), ARIA endpoints for staff and family.
+- **Instant pairing (D-99):** bands provisioned to the facility once, then a **band pool**; assign / unassign / swap per resident and identify (buzz), applied on the gateway in **< 10 s** through the `bands` shadow. Staff payloads show name + `residentNo`, never band IDs.
+- **Medications (D-98, `21`):** medication records and schedules per resident, dose rounds, reminder push on the `medication` channel (no names), dose marking with undo, PRN, MAR + PDF, the app's 24 h offline schedule, WS `dose.updated`; agents get counts only (`medication_counts`). Records and reminders, never advice.
+- **Dashboards and family:** live floor, metrics, the family API (`10` §6; real incident data incl. false alarms as "checked, no issue", D-101), per-person family unlink / deactivate and the discharge choice, ARIA endpoints for staff and family.
 - **Billing (`12`):** bed-day invoices, PayHere checkout and recurring payments, verified idempotent webhooks, credit notes, the non-payment timeline and **suspension / restore**; invoice PDFs; e-mail via SES.
 - **Ops API (`13`):** tenant **provisioning** (starts the Step Functions job; retry / discard), onboarding checklist, organisations, gateways, band stock, rollouts via IoT Jobs, billing overview, support grants, data requests, platform health.
 - **Internal API for `sotercare-agents` (`14` §7):** per-case or per-chat Ed25519 token; **each agent's tool allow-list is enforced on every call**; read tools, output / proposal / cover-request / trace / ARIA-message writes; domain events through the outbox; pseudonymised Parquet export to S3. There is never an alerts endpoint.
@@ -29,8 +31,8 @@ NestJS 11 · TypeScript · PostgreSQL 16 (one RDS per tenant + control DB) with 
 
 ## Build plan
 Two builder lanes in one SerenEdge project (D-78, `18` §5.1):
-- **B1 devices and alerts:** tenant routing, auth, `GET /me`, seed tool, ingest + `record_ack`, alert mirror, WebSocket, residents, bands + provisioning, shadows, local credential, shifts, push, claim forwarding, `/v1/ops`.
-- **B2 people, money, AI:** accounts, station PIN, settings + policy sign-off, synth tool, family API, billing + PayHere + suspension, internal API, Parquet export, ARIA endpoints, audit, exports.
+- **B1 devices and alerts:** tenant routing, auth, `GET /me`, seed tool, ingest + `record_ack`, alert mirror, WebSocket, residents + `residentNo`, bands + provisioning, band pool + assign / swap + identify, shadows, local credential, shifts, push, claim forwarding, `/v1/ops`.
+- **B2 people, money, AI:** accounts, station PIN, settings + policy sign-off, synth tool, family API + per-account discharge, **medications**, billing + PayHere + suspension, internal API, Parquet export, ARIA endpoints, audit, exports.
 
 Day 14 is a release candidate; the follow-on is in `18` §1.
 
