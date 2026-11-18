@@ -66,7 +66,7 @@ Spec §3 (History), §5, §15.6.
   - `apps/back-end`, `apps/api-gateway/src/nurse`, `apps/api-gateway/src/realtime/alert-writer*`;
   - `3days-sample.json`, `dist/`, `Dockerfile`, `start.sh`, `docker-compose.yml` (the Koyeb version).
 - Move: `apps/api-gateway/src/**` → `src/<module>/` per spec §5; keep `test/support/*`, `migrations` pattern, `scripts/ws-*.cjs`.
-- Create: `package.json` (one app), `tsconfig.json`, `nest-cli.json`, `src/main.api.ts`, `src/main.worker.ts`, `docker-compose.yml` (Postgres 16, Redis 7, LocalStack: SQS, S3, SNS), `.env.example`, `.github/workflows/ci.yml`.
+- Create: `package.json` (one app), `tsconfig.json`, `nest-cli.json`, `src/main.api.ts`, `src/main.worker.ts`, `docker-compose.yml` that `include`s `../sotercare-infra/local/compose.yaml` (Postgres 16, Redis 7, LocalStack queues and buckets: one source, infra plan Task 1; queue names `sc-local-*`), `.env.example` (copied from infra's `.env.local.example`), `.github/workflows/ci.yml`.
 
 - [ ] **Step 1:** In a temp folder, clone the old `back-end` and reduce its history.
   ```bash
