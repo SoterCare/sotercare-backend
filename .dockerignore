@@ -1,0 +1,19 @@
+# Keep secrets and local artefacts out of the image build context.
+# Without this file, `COPY . .` in the Dockerfile copies a local .env (real
+# keys) and .git into any image built from a working copy, and ConfigModule
+# would load that .env at runtime. Runtime configuration must come from the
+# platform's environment variables instead.
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+node_modules
+**/node_modules
+dist
+coverage
+apps/ai-summary-service/venv
+**/__pycache__
+.claude
+.codex
+.vscode

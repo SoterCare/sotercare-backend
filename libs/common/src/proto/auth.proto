@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package auth;
+
+service AuthService {
+  rpc RegisterUser (RegisterUserRequest) returns (AuthResponse);
+  rpc VerifyRegistration (VerifyRegistrationRequest) returns (VerifyRegistrationResponse);
+  rpc LoginInit (LoginInitRequest) returns (AuthResponse);
+  rpc LoginVerify (LoginVerifyRequest) returns (LoginResponse);
+  rpc UpdateProfile (UpdateProfileRequest) returns (AuthResponse);
+  rpc GetProfile (GetProfileRequest) returns (GetProfileResponse);
+  rpc InitiateEmailUpdate (InitiateEmailUpdateRequest) returns (AuthResponse);
+  rpc VerifyEmailUpdate (VerifyEmailUpdateRequest) returns (AuthResponse);
+}
+
+message RegisterUserRequest {
+  string name = 1;
+  string email = 2;
+}
+
+message VerifyRegistrationRequest {
+  string email = 1;
+  string otp = 2;
+}
+
+message LoginInitRequest {
+  string email = 1;
+}
+
+message LoginVerifyRequest {
+  string email = 1;
+  string otp = 2;
+}
+
+message UpdateProfileRequest {
+  int32 id = 1;
+  string name = 2;
+  string email = 3;
+  string mobileNumber = 4;
+}
+
+message GetProfileRequest {
+  int32 id = 1;
+}
+
+message GetProfileResponse {
+  bool success = 1;
+  string message = 2;
+  User user = 3;
+}
+
+message InitiateEmailUpdateRequest {
+  int32 userId = 1;
+  string newEmail = 2;
+}
+
+message VerifyEmailUpdateRequest {
+  int32 userId = 1;
+  string newEmail = 2;
+  string otp = 3;
+}
+
+message User {
+  int32 id = 1;
+  string email = 2;
+  string name = 3;
+  string mobileNumber = 4;
+}
+
+message AuthResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message VerifyRegistrationResponse {
+    bool success = 1;
+    string message = 2;
+    string accessToken = 3;
+    User user = 4;
+}
+
+message LoginResponse {
+  bool success = 1;
+  string message = 2;
+  string accessToken = 3; // JWT token
+  User user = 4;
+}
+

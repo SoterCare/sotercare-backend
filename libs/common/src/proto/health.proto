@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package health;
+
+
+
+message LogEntry {
+  int32 id = 1; // Clients local ID
+  float temperature = 2;
+  float ambient_temp = 3;
+  float moisture = 4;
+  string gait_label = 5;
+  bool sos = 6;
+  string thighnode_status = 7;
+  bool fall_alert = 8;
+  int64 timestamp = 9;
+  int32 heart_rate = 10;
+  int32 spo2 = 11;
+  string device_id = 12; // Physical device id; empty for app-only mobile sync
+}
+
+message SyncLogsRequest {
+  int32 user_id = 1;
+  repeated LogEntry logs = 2;
+}
+
+
+message SyncLogsResponse {
+  bool success = 1;
+  string message = 2;
+  int32 synced_count = 3;
+}
+
+message GetLogDatesRequest {
+  int32 user_id = 1;
+}
+
+message GetLogDatesResponse {
+  repeated string dates = 1; // List of dates in YYYY-MM-DD format
+}
+
+message DateRangeRequest {
+  int32 user_id = 1;
+  string start_date = 2; // ISO 8601
+  string end_date = 3;   // ISO 8601
+}
+
+message GetLogsByDateRangeResponse {
+  repeated LogEntry logs = 1;
+}
+
+service HealthService {
+  rpc SyncLogs (SyncLogsRequest) returns (SyncLogsResponse);
+  rpc GetLogDates (GetLogDatesRequest) returns (GetLogDatesResponse);
+  rpc GetLogsByDateRange (DateRangeRequest) returns (GetLogsByDateRangeResponse);
+}

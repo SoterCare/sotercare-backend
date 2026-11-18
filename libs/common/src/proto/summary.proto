@@ -1,0 +1,30 @@
+syntax = "proto3";
+package summary;
+
+service SummaryService {
+  rpc Chat               (ChatRequest)               returns (ChatResponse);
+  rpc UploadPrescription (UploadPrescriptionRequest) returns (UploadPrescriptionResponse);
+}
+
+message ChatRequest {
+  int32  user_id    = 1;
+  string message    = 2;
+  string session_id = 3;
+}
+
+message ChatResponse {
+  string reply      = 1;
+  string session_id = 2;
+}
+
+message UploadPrescriptionRequest {
+  int32  user_id   = 1;
+  bytes  file_data = 2;
+  string file_name = 3;
+}
+
+message UploadPrescriptionResponse {
+  bool   success = 1;
+  string message = 2;
+  string doc_id  = 3;
+}
