@@ -325,7 +325,7 @@ It's exposed as the CLI `tenant:create` and `POST /v1/ops/tenants` (ops pool). S
 - **Contract tests:** request / response bodies validated against the pinned contracts schemas; the AsyncAPI messages the worker publishes are validated too.
 
 ## 15. Open items and calls (check while reading)
-1. **Contracts addition (additive, before 22 Nov):** the internal read tool `staff_availability`, which the iit Roster Coordinator uses. It's raised with the contracts owner; until it lands it's served at the operation ID `getStaffAvailability` under the same guard.
+1. **`staff_availability`** (D-139, contracts C-28): `GET /internal/v1/staff/availability`, Roster Coordinator only, pseudonymous `staffKey`; the backend resolves `staffKey` → user only when creating cover requests.
 2. **Agents' pseudonyms:** the internal API returns `residentNo` (and `residentId`), never names. The pseudonym-resolve tool maps both ways for the backend's own render. Call: `residentNo` is the agents' resident key, as in the iit file adapter.
 3. **Family sockets** are refused until spec 2 adds the family room.
 4. **Escalation of incident proposals after 24 h** uses a BullMQ delayed job keyed on the proposal, cancelled on decision.
