@@ -223,7 +223,7 @@ It's exposed as the CLI `tenant:create` and `POST /v1/ops/tenants` (ops pool). S
 - **Staff payloads never carry `bandId`.** The exception is an unassigned-band alert, which carries `bandLabel`.
 
 ## 10. Shadows, local credential keys, push (safety core)
-- **Shadows:** `ShadowBuilder` per shadow (`roster`, `bands`, `residents`, `policy`, `keys`, `service`) builds `content` from the tenant DB exactly per the contracts shadow schemas (`roster` = shifts for the next 72 h).
+- **Shadows:** `ShadowBuilder` per shadow (`roster`, `bands`, `residents`, `policy`, `keys`, `service`) builds `content` from the tenant DB exactly per the contracts shadow schemas (`roster` = shifts for the next 72 h). Shadows are per gateway thing: `service.gatewayRole` is `active` for the facility's active unit and `standby` for any other (C-29), and an active-gateway switch rewrites both units' `service` (and `bands`) shadows.
   - **The publisher** bumps a strictly increasing `version`, computes `sha256`, and puts content > 7 KB in S3 (`contentRef`, fetched via `url-req`). It calls `UpdateThingShadow` (named shadow, `desired`) for the facility's **active** gateway only. `bands` keys are wrapped to that gateway's public key.
   - **Triggers:** any change to the source rows (debounced 2 s), hourly for `roster` (the 72 h window moves), and on gateway activation.
   - The applied version comes from the shadow reports.
