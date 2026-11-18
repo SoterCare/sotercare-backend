@@ -57,7 +57,7 @@ Usable on `dev` by 24 Nov (T2-1), accepted by 27 Nov (T2-2).
 
 ---
 
-### Task 0: Import the old code with history and restructure (Wed 19 Nov, B1)
+### Task 0: Import the old code with history and restructure (Thu 19 Nov, B1)
 Spec §3 (History), §5, §15.6.
 
 **Files:**
@@ -85,7 +85,7 @@ Spec §3 (History), §5, §15.6.
 - [ ] **Step 4:** Run `npm run build && npm test && git log --format=%B | grep -ci co-authored`. Expected: build OK, tests PASS, count `0`.
 - [ ] **Step 5:** Commit `chore: import old back-end with history and restructure into modular monolith`, then `git checkout main && git merge --ff-only import-old && git push origin main`. This is a normal push, never forced.
 
-### Task 1: Core: config, clock, context, errors, idempotency, logging (Thu 20 Nov, B1)
+### Task 1: Core: config, clock, context, errors, idempotency, logging (Fri 20 Nov, B1)
 Spec §3, §6 (request context), §14.
 
 **Files:**
