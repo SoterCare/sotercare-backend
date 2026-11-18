@@ -2,6 +2,20 @@
 
 **Priority (D-133):** this repo's **Tier 2 "backend core"** comes before everything else here (`b2b-plan/18` §0.3); only the `sotercare-iit` agentic MVP (Tier 1) ranks higher. Tier 2 is tenant routing, auth (incl. the agents' Ed25519 service token), seed (also importing the iit generator output), SQS ingest + `record_ack` + alert mirror, and the **internal API** (`14` §7): guard and allow-lists, read tools, writes, outbox triggers, Parquet, plus the `/v1` agent-output endpoints and WS events. It's usable on `dev` by **24 Nov** and accepted on **27 Nov** (T2-1, T2-2); live integration with the iit internal-API adapter runs 30 Nov – 4 Dec. The internal API is the integration seam (`18` §0.4): the console and app get agent outputs only through this backend. Everything else is Tier 3, best effort toward 28 Nov; the safety core (shadows, local credential, push and escalation, suspension keeping local alerts) is never cut.
 
+## Branching and contribution rules (SerenEdge workflow)
+
+Work in this repo now comes from **SerenEdge** tasks and issues (each repo is one SerenEdge project, D-103). `main` is the release branch and `dev` is the integration branch where all day-to-day work lands. Every future change gets its own short-lived branch off `dev`, merged back into `dev` by pull request. `dev` is merged into `main` only at release points (a release PR, `dev` → `main`).
+
+These rules apply to every agent and contributor:
+
+- **Branches:** work only on a branch off `dev`, named `task/<KEY>-<short-slug>` (for example `task/PROJ-42-add-due-dates`). When the work is a bug or issue, use `issue/<KEY>-<short-slug>` (for example `issue/PROJ-57-login-error`).
+- **Pull requests:** open a PR into `dev` for every change. Never commit straight to `main` (or to `dev`).
+- **Commit messages:** `<KEY>: short imperative summary` (for example `PROJ-42: add due dates`).
+- **No attribution:** never add a `Co-Authored-By` trailer, a "Generated with" line, or any AI or agent attribution to commits, pull requests, code comments or docs.
+- **No secrets:** never commit secrets or a `.env` file.
+- **No new frameworks or dependencies** without asking first.
+- **Keep changes small** and tied to one task.
+
 ## What this repo is
 The **core platform**: a NestJS 11 modular monolith on ECS (shared, stateless), deployed as two services from one codebase (`b2b-plan/02` §2–3):
 - `api`: REST `/v1` (tenant pools), `/v1/ops` (ops pool), `/internal/v1` (agents and ARIA), Socket.IO;
@@ -116,6 +130,6 @@ sotercare-website (sotercare.com), sotercare-links (links.sotercare.com): standa
 
 **Git and commits:**
 - Protected `main`, PRs with CI (lint, typecheck, tests, contract tests against the pinned contracts version). SerenEdge tasks merge to `dev`; a release PR moves `dev` → `main` (O-23).
-- Conventional commits (`feat:`, `fix:`, `docs:`…).
+- Commit messages follow `<KEY>: short imperative summary` (see "Branching and contribution rules" above); this replaces conventional commits.
 - **Never add `Co-Authored-By:` or any AI-attribution trailer to commits.**
 - No secrets in git; AWS Secrets Manager in the cloud.
