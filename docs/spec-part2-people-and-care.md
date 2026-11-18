@@ -35,7 +35,7 @@ Part of the backend spec (rev 2, 19 Nov 2026). Part 1 ([`spec.md`](spec.md)) hol
 - **Discharge choices** are applied through the same code (§19.4).
 
 ### 16.5 `GET /me`, `PATCH /me`, notices
-- `GET /me` → `me` (contracts §7.11): for care staff with `X-Login-Type: staff` and an `X-Installation-Id`, a **fresh local credential** (Part 1 §7; one per installation, the previous one for that installation is revoked) and `gateway {gatewayId, addrs, wssPort, certSha256}` from the latest heartbeat's `lan` block (a facility `devices_network` override wins for `addrs`).
+- `GET /me` → `me` (contracts §7.11): for care staff with `X-Login-Type: staff` and an `X-Installation-Id`, a **fresh local credential** (Part 1 §7; one per installation, the previous one for that installation is revoked) and `gateway {gatewayId, addrs, wssPort, certSha256, staffSsids}` from the latest heartbeat's `lan` block (a facility `devices_network` override wins for `addrs`; `staffSsids` from the `devices_network` setting, contracts C-32).
 - `notices[]`: `password_reset_by_manager` (until the user signs in once after it), `account_recovery` (shown to every manager for 7 days, §31.6).
 - `PATCH /me {language}`; first-login password change is Cognito's `NEW_PASSWORD_REQUIRED` flow, after which `status → active`.
 
@@ -54,7 +54,7 @@ Part of the backend spec (rev 2, 19 Nov 2026). Part 1 ([`spec.md`](spec.md)) hol
   | `facility` (time zone) | refused unless a new policy draft with the same `timeZone` is signed off in the same request flow (`09` §2): the PATCH returns 409 `conflict` `details.reason policy_required` and the console creates the draft; published shifts don't move (`08`) and are flagged for review |
   | `layout` | wards / rooms / beds are their own endpoints (§19.1); this group holds named ward heads |
   | `nurse_station`, `sensors`, `haptic`, `night`, `escalation` | the values the gateway needs are **policy** fields; changing them creates a policy draft (§18.2). Quiet hours per manager → `roster.staff[].quietHours` |
-  | `devices_network` | a band Wi-Fi change bumps `bands.wifi.wifiGen` (the password wrapped to the gateway key, Part 1 §10); the rollout progress comes back in `gateway_info.wifiRollout`. LTE failover → `service.network.lteFailover` |
+  | `devices_network` | `staffSsids` (C-32) goes to `me.gateway`; a band Wi-Fi change bumps `bands.wifi.wifiGen` (the password wrapped to the gateway key, Part 1 §10); the rollout progress comes back in `gateway_info.wifiRollout`. LTE failover → `service.network.lteFailover` |
   | `shifts` | margin → `roster.shiftMarginMin`; reminder / roster-gap times → the schedulers (§20) |
   | `medication` | reminder lead / windows → the dose scheduler (§21.4); the family card → `family_app` cards |
   | `family_app`, `agents` | `tenant.settings_changed {groups}` domain event (agents re-read from the next trigger) |
