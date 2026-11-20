@@ -229,6 +229,36 @@ Source: Task 40; spec §27, §28. Lane B3, INT Mon 30 Nov – Tue 1 Dec, milesto
 SerenEdge task: SOTERCAR-42 (t41).
 Source: Task 41; spec §33. Lane X2 + B2 + B3, Fri 27 – Sat 28 Nov, milestone CP9. Type `test`. Depends on: t17–t40. SerenEdge allows one tested task per test task, so `testedBy` links it to t31 (SOTERCAR-32) only; the other Part 2 and 3 tasks carry their own tests. `allowLarge`.
 
+## Part 4: gap tasks (added 20 Nov)
+
+The project key is `SCBE`: every `SOTERCAR-<n>` above is SerenEdge task `SCBE-<n>` (same number). New tasks below use the real keys. Every one depends on the CI foundation SCBE-1.
+
+### Task 42: Synthetic history tool
+SerenEdge task: SCBE-43 (t42).
+Source: `docs/plan.md` Task 42; spec §13, §8; `b2b-plan/18` §4, §7. Lane B2, Sun 22 Nov, milestone CP9. Depends on: SCBE-1, SCBE-5 (t4), SCBE-6 (t5).
+Delivers `tools/synth`: 30 deterministic days for tenant `demo` (rollups, band / gateway status, alerts + verdicts and moisture episodes through the mirror as backlog, shifts). Flags: personal_data (synthetic only).
+
+### Task 43: Synthetic history medication marks and Parquet
+SerenEdge task: SCBE-44 (t43).
+Source: Task 43; spec §21, §11. Lane B2, Wed 25 Nov (CP6), milestone CP9. Depends on: SCBE-43 (t42), SCBE-15 (t14), SCBE-27 (t26).
+Delivers synthetic schedules + dose marks (placeholder names, synthetic recommendation) and a Parquet export of the synthetic history with no medication columns. Flags: personal_data.
+
+### Task 44: Ops approvals MFA reset platform audit AI budget override
+SerenEdge task: SCBE-45 (t44).
+Source: Task 44; spec §31.1, §31.5, §29.5; contracts 1.2.0 `ops.yaml` (gap list G1, G2, G3, G7, for SCOPS-22..24). Lane B3, Thu 26 Nov (before the 20:00 feature freeze), milestone CP9. Depends on: SCBE-38 (t37), SCBE-34 (t33). Blocks SCBE-42 (t41). Pins `@sotercare/contracts` 1.2.0 as its first step. Flags: auth, permissions, dependencies.
+
+### Task 45: Ops announcements rollouts invoice detail job status
+SerenEdge task: SCBE-46 (t45).
+Source: Task 45; spec §31.2, §31.5, §31.7, §31.8; gap list G4, G5, G6, G8. Lane B3, Thu 26 Nov, milestone CP9. Depends on: SCBE-45 (t44), SCBE-35 (t34), SCBE-39 (t38), SCBE-40 (t39). Blocks SCBE-42 (t41). Flags: permissions, payments.
+
+### Task 46: Load test support and fixes
+SerenEdge task: SCBE-47 (t46).
+Source: Task 46; spec §6, §8, §11, §12; `b2b-plan/18` §6 CP8, §7. Lane B1 with X2, Thu 26 – Fri 27 Nov, milestone CP9. Depends on: SCBE-3 (t2), SCBE-6 (t5), SCBE-12 (t11), SCBE-14 (t13), SCBE-18 (t17). `allowLarge` (fixes from the run). Manual: `devops`, `link`: run the infra `e2e/` k6 scenario on `staging` with X2 and attach the summary, 2 h. Flags: auth, infra.
+
+### Task 47: Delete the legacy contracts copy
+SerenEdge task: SCBE-48 (t47).
+Source: Task 47; `sotercare-contracts` CLAUDE.md (delete the old `contracts/v1` copies after consumers pin). Lane B1, Sat 21 Nov. Depends on: SCBE-2 (t1, pins `@sotercare/contracts`). No flags.
+
 ---
 
 ## Self-review
