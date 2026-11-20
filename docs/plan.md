@@ -5,6 +5,7 @@
 **Goal:** Deliver the whole backend:
 - **Tasks 0–16 (Part 1):** tenant routing, auth, ingest + alert mirror, the internal API for the agents, `/v1` agent outputs, and the safety core (shadows, local credential, push, claim forwarding, `gateway_offline`, the assignment mirror). Usable on `dev` by 24 Nov (T2-1), accepted by 27 Nov (T2-2).
 - **Tasks 17–41 (Parts 2 and 3):** accounts, settings and policy, residents, shifts, medications, Medical records, voice notes, audit / exports / PDPA, metrics, the family API and live view, ARIA, the rest of the agent plumbing, billing and suspension, the ops API and support access. Dated to the B2 / B3 / B1 lane columns of `b2b-plan/18` §5.1 (22–28 Nov); ARIA endpoints in the INT week (30 Nov – 4 Dec, `18` §5.1).
+- **Tasks 42–47 (Part 4, added 20 Nov):** synthetic history (`tools/synth`), the ops routes for contracts 1.2.0 (G1–G8), load-test support and the legacy contracts cleanup.
 
 **Architecture:** A NestJS 11 modular monolith with two entry points (`api`, `worker`). There's one PostgreSQL database per tenant behind a `TenantRegistry`, plus a control DB. The tenant comes only from the token issuer, the gateway registry or the service token. Gateway records arrive by SQS and are acked after commit. Domain events leave through a transactional outbox.
 
@@ -902,3 +903,123 @@ Spec §33.
 - [ ] **Step 3:** Fix in the owning module.
 - [ ] **Step 4:** Run the full suite and the backend side of `18` §9 scenarios 3, 4, 5, 7, 8, 9, 12, 13, 16, 17, 19, 20, 22, 23, 24, 26, 28, 30, 31, 32, 33 on `staging`. Record the results in `docs/acceptance-parts-2-3.md`; anything failing is filed and, if safety, carried over in `b2b-plan/19`.
 - [ ] **Step 5:** Commit `test: isolation and acceptance for parts 2 and 3`.
+
+---
+
+## Part 4: gap tasks (Tasks 42–47, added 20 Nov)
+Tasks the first plan missed: the synthetic-history stand-in (`b2b-plan/18` §4, §7), the ops endpoints the ops console needs from contracts 1.2.0, the backend side of the CP8 load test, and the legacy contracts copy left by the cut-over. SerenEdge keys: Task 42 = SCBE-43 … Task 47 = SCBE-48 (Task n = SCBE-(n+1), as for Tasks 0–41).
+
+### Task 42: Synthetic history tool `tools/synth` (Sun 22 Nov, B2)
+Spec §13 (seed), §8 (ingest, rollups); `b2b-plan/18` §4 (stand-in "Synthetic history (30 days; Parquet export)", ready 22 Nov) and §7.
+
+**Files:**
+- Create: `tools/synth/{index,generators,rng}.ts`, `test/synth/*.spec.ts`, `test/fixtures/synth/ranges.json` (expected value ranges).
+- Modify: `package.json` (script `synth` only, no new dependency), `README.md` (one line: run after `seed:demo`).
+
+**Interfaces:**
+- Consumes: `seed:demo` (Task 4: residents, bands, staff, shifts), `RecordRouter.handle(msg, "backlog")`, `AlertMirror`, `RollupJob` (Task 5), the injected `Clock`.
+- Produces: `npm run synth -- --tenant demo --days 30 --seed 7`: 30 days ending at today (`Asia/Colombo`) of hourly telemetry rollups, band and gateway status, alerts with verdicts (`real` / `checked_no_issue`) and moisture episodes (built as contracts `alert_record`s through the mirror on the `backlog` queue, so nothing pushes), and shift history. Stable uuid v5 IDs from `(seed, tenant, kind, index)`; a small seeded PRNG (`mulberry32`) in `rng.ts`.
+
+- [ ] **Step 1:** Write the tests.
+  - `same seed same rows`: two runs with seed 7 give identical rows; seed 8 differs.
+  - `synth rerun is idempotent`: row counts unchanged.
+  - `synth alerts never push or emit`: no push, no `alert.event`, no outbox row.
+  - `synth values inside fixture ranges`: false-alarm rate, response times, walking minutes inside `ranges.json` (charts are never flat or absurd).
+  - `synth refuses staging and prod`: exits before any DB connection; any tenant other than `demo` needs `--allow-tenant` (local / dev only).
+  - `synth writes no names notes or free text`.
+- [ ] **Step 2:** Run `npm run test:int -- synth`. Expected: FAIL.
+- [ ] **Step 3:** Implement. Synthetic only: residents and staff come from `seed:demo`; no text fields are generated.
+- [ ] **Step 4:** Run `npm run test:int -- synth && npm run seed:demo && npm run synth -- --tenant demo --days 30 --seed 7`. Expected: PASS; console charts and the family dashboard have 30 days of data (CP3 / CP6).
+- [ ] **Step 5:** Commit `SCBE-43: synthetic 30-day history for tenant demo`.
+
+### Task 43: Synthetic history: medication marks and Parquet export (Wed 25 Nov, B2; CP6)
+Spec §21 (medications), §11 (Parquet).
+
+**Files:**
+- Create: `tools/synth/medication.ts`, `test/synth/{medication,parquet}.spec.ts`.
+- Modify: `tools/synth/index.ts` (flags `--with-medication`, `--parquet`).
+
+**Interfaces:**
+- Consumes: the Task 26 medication and dose services, `ExportJob.run(tenantId, day)` (Task 14).
+- Produces: synthetic schedules for the demo residents with placeholder names (`Med A` … `Med F`), each linked to a synthetic doctor's recommendation record (D-111); 30 days of marks (`taken`, `not_recorded`, `resident_away`) for the MAR and the family opt-in on-time %; one Parquet export per synthetic day under the `demo` tenant prefix.
+
+- [ ] **Step 1:** Write the tests: `synth medication marks are deterministic by seed`, `synth medication creates no push text events or outbox rows`, `synthetic parquet matches contracts export columns and has no medication`, `synthetic parquet has no medical records or name columns`.
+- [ ] **Step 2:** Run `npm run test:int -- synth`. Expected: FAIL.
+- [ ] **Step 3:** Implement; medication rows go only through the medication services, never into Parquet (D-49, D-98).
+- [ ] **Step 4:** Run the same command. Expected: PASS.
+- [ ] **Step 5:** Commit `SCBE-44: synthetic medication marks and parquet export`.
+
+### Task 44: Ops routes for contracts 1.2.0: approvals list, ops MFA reset, platform audit, AI budget override (Thu 26 Nov, B3)
+Spec §31.1, §31.5, §29.5. Extends Tasks 37 and 33. The ops console's gap list G1, G2, G3, G7 (consumed by SCOPS-22..24); paths and operationIds from contracts 1.2.0 `openapi/ops.yaml` (not on contracts `dev` yet on 20 Nov; tracked in the backend issue "Ops routes for contracts 1.2.0 (G1–G8)"). Lands before the 26 Nov 20:00 feature freeze.
+
+**Files:**
+- Create: `src/ops/{approvals.controller,ops-users.controller,platform-audit.controller,ai-budget-override.controller}.ts`, `test/ops/{approvals-list,ops-mfa-reset,platform-audit,ai-budget-override}.spec.ts`.
+- Modify: `package.json`, `package-lock.json` (`@sotercare/contracts` exactly `1.2.0`), `src/ops/approvals.service.ts`, `src/agents/ai-budget.ts` (Task 33).
+
+**Interfaces:**
+- G1 `GET /v1/ops/approvals?status=pending` (paged; expired approvals are not pending).
+- G2 ops-user MFA reset → 202 `approval`; a **different** ops user approves within 24 h (same user → 403 `approval_required`), then the ops-pool MFA is reset.
+- G3 `GET /v1/ops/audit?actor=&action=&tenantId=&from=&to=` over `platform_audit`; rows carry IDs only.
+- G7 `POST /v1/ops/tenants/{id}/ai-budget-override` (amount, until, reason) → reflected in `GET /internal/v1/facility` `aiBudget`.
+
+- [ ] **Step 1:** Bump `@sotercare/contracts` to exactly `1.2.0` (or `github:SoterCare/sotercare-contracts#<commit>` until the tag exists, per Global Constraints). Commit `SCBE-45: pin contracts 1.2.0`.
+- [ ] **Step 2:** Write the tests: `approvals list shows pending only`, `same ops user cannot approve own mfa reset → 403 approval_required`, `mfa reset runs after second approval`, `platform audit filters and returns ids only`, `ai budget override reflected in internal facility`, `tenant tokens refused on new ops routes`, `new ops routes match contracts 1.2.0 ops.yaml`.
+- [ ] **Step 3:** Run `npx jest test/ops`. Expected: FAIL.
+- [ ] **Step 4:** Implement; every action → `platform_audit`, tenant actions also → the tenant `audit.events` (`actorKind ops`).
+- [ ] **Step 5:** Run the same command. Expected: PASS. Commit `SCBE-45: ops approvals list, ops mfa reset, platform audit, ai budget override`.
+
+### Task 45: Ops routes for contracts 1.2.0: announcements, rollouts list, invoice detail, job status (Thu 26 Nov, B3)
+Spec §31.2, §31.5, §31.7, §31.8. Extends Tasks 38 and 39. Gap list G4, G5, G6, G8; contracts pinned by Task 44. Lands before the feature freeze; if Task 39 slips to 27 Nov, G4 and G5 land with it.
+
+**Files:**
+- Create: `src/ops/jobs-status.controller.ts`, `test/ops/{announcements-list,rollouts-list,invoice-detail,job-status}.spec.ts`.
+- Modify: `src/ops/{announcements.controller,rollouts.service,billing-ops.controller,restore-db.service}.ts`.
+
+**Interfaces:**
+- G4 `GET /v1/ops/announcements` + end early (sets `until = now`, WS removal to each tenant's `facility` room).
+- G5 `GET /v1/ops/rollouts` (stage, status; filter by status).
+- G6 `GET /v1/ops/invoices/{id}` (lines, daily bed-days, payments, credit notes, minor units) + the invoice PDF (presigned GET ≤ 15 min) + dispute resolve (`won` / `lost`; lost reopens with a new due date, §31.5).
+- G8 restore-db job status and closing export status by `jobId` (unknown → 404).
+
+- [ ] **Step 1:** Write the tests: `announcements list and end early`, `rollouts list filters by status`, `invoice detail has lines bed-days payments and credit notes matching ops.yaml`, `invoice pdf presigned under 15 min`, `dispute lost reopens with new due date`, `restore and closing job status by jobId`, `new ops routes match contracts 1.2.0 ops.yaml`, `tenant tokens refused`.
+- [ ] **Step 2:** Run `npx jest test/ops`. Expected: FAIL.
+- [ ] **Step 3:** Implement; billing routes need `platform_billing` or `platform_admin`.
+- [ ] **Step 4:** Run the same command. Expected: PASS.
+- [ ] **Step 5:** Commit `SCBE-46: ops announcements, rollouts list, invoice detail and job status`.
+
+### Task 46: Load-test support and fixes (Thu 26 – Fri 27 Nov, B1 with X2; CP8)
+Spec §6 (pools), §8, §11, §12; `b2b-plan/18` §6 CP8 (3 tenants × 60 bands, 25 phones each) and §7 ("Load test: X2 + B1, 27 Nov, k6 + band-sim"). The k6 scenario itself is in `sotercare-infra` `e2e/`; this task is what the backend owns.
+
+**Files:**
+- Create: `tools/seed/load.ts`, `tools/load/tokens.ts`, `test/load/seed-load.spec.ts`, `docs/load-test-2026-11-27.md`.
+- Modify: `package.json` (script `seed:load`), `.gitignore` (the token file), `src/tenancy/tenant-db.ts` (pool-usage log event, IDs only); fixes in the owning modules.
+
+**Interfaces:**
+- `npm run seed:load -- --tenants 3 --bands 60 --phones 25`: tenants `load1`…`load3`, each 60 beds, residents and bands (assigned via synthetic `assignment_record`s), 25 staff; idempotent; refuses `prod`.
+- `tools/load/tokens.ts`: per-user tokens (local JWKS issuer in `local` / `dev`, Cognito test users in `staging`) written to a git-ignored file k6 reads.
+
+**Acceptance (measured on the run):**
+- every SOS / fall alert record acked `committed` exactly once; no lost and no duplicate push (push log vs record log);
+- DB connections ≤ 5 per tenant per container (`pg_stat_activity` sampled every 10 s);
+- p95 < 500 ms for `GET /v1/alerts`, `GET /v1/residents` and alert actions (excluding the 3 s claim wait), 0 5xx. The spec states no latency figure; this is a call made here, and the measured p50 / p95 / p99 are recorded;
+- SQS live queue age < 60 s; backlog never delays live.
+
+- [ ] **Step 1:** Write the test `seed load creates 3 tenants with 60 assigned bands and 25 staff each, idempotent`.
+- [ ] **Step 2:** Run `npm run test:int -- load`. Expected: FAIL.
+- [ ] **Step 3:** Implement the seed, the token helper and the pool gauge. Document the rate-limit and pool settings in `docs/load-test-2026-11-27.md`.
+- [ ] **Step 4:** With X2, run the k6 scenario on `staging` (manual step on the SerenEdge task). Fix each finding in its owning module with a regression test. Record results against the acceptance list above.
+- [ ] **Step 5:** Commit `SCBE-47: load-test seed, tokens and fixes`.
+
+### Task 47: Delete the legacy contracts copy (Sat 21 Nov, B1)
+`sotercare-contracts` CLAUDE.md: after consumers pin the package, delete the old `contracts/v1` copies. The cut-over left `config/alert-policy.v1.json`, `scripts/contracts-checksums.cjs`, specs reading `../contracts/v1` (`contracts.spec.ts`, `push.unit.spec.ts`, `device-event.contract.spec.ts`, `device-event.pg.spec.ts`) and "Mirrors contracts/v1" DTO comments. Depends on Task 1 (pins `@sotercare/contracts`).
+
+**Files:**
+- Delete: `config/alert-policy.v1.json`, `scripts/contracts-checksums.cjs`, the specs above (or rewrite them against the package schemas).
+- Modify: the alert-policy loader (reads `@sotercare/contracts` `policy/default.alert-policy.v1.json`), the DTO comments.
+- Create: `test/core/no-legacy-contracts.spec.ts`.
+
+- [ ] **Step 1:** Write the test `no source file references contracts/v1 or config/alert-policy.v1.json`.
+- [ ] **Step 2:** Run `npx jest test/core/no-legacy-contracts`. Expected: FAIL.
+- [ ] **Step 3:** Delete and repoint as above.
+- [ ] **Step 4:** Run `npm test`. Expected: PASS; the loaded default policy equals the contracts file byte for byte.
+- [ ] **Step 5:** Commit `SCBE-48: delete the legacy contracts copy`.
