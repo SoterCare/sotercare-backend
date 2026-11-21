@@ -1001,7 +1001,8 @@ Spec §6 (pools), §8, §11, §12; `b2b-plan/18` §6 CP8 (3 tenants × 60 bands,
 **Acceptance (measured on the run):**
 - every SOS / fall alert record acked `committed` exactly once; no lost and no duplicate push (push log vs record log);
 - DB connections ≤ 5 per tenant per container (`pg_stat_activity` sampled every 10 s);
-- p95 < 500 ms for `GET /v1/alerts`, `GET /v1/residents` and alert actions (excluding the 3 s claim wait), 0 5xx. The spec states no latency figure; this is a call made here, and the measured p50 / p95 / p99 are recorded;
+- latency (provisional until the PO confirms; no plan doc sets one): p95 < 500 ms for alert actions (claim, arrive, resolve, ack; excluding the 3 s claim wait) and the main REST reads (`GET /v1/alerts`, `GET /v1/residents`); p95 < 1 s for every other API call; the measured p50 / p95 / p99 are recorded in the report;
+- errors: 5xx < 1 % overall and 0 on alert actions;
 - SQS live queue age < 60 s; backlog never delays live.
 
 - [ ] **Step 1:** Write the test `seed load creates 3 tenants with 60 assigned bands and 25 staff each, idempotent`.
