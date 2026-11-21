@@ -1,0 +1,6 @@
+{
+  "command": "node tools/ci/run.mjs",
+  "quickCommand": "node tools/ci/run.mjs --quick",
+  "files": ["package.json", "tools/ci/run.mjs", "jest.int.config.js", ".github/workflows/ci.yml"],
+  "timeoutMinutes": 30
+}
