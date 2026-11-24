@@ -8,7 +8,8 @@ import {
 } from '@nestjs/common';
 import { Observable, of } from 'rxjs';
 import { tap } from 'rxjs/operators';
-import { CLOCK, Clock } from './clock';
+import { CLOCK } from './clock';
+import type { Clock } from './clock';
 import { TenantContext } from './context';
 import { ApiError } from './errors';
 
