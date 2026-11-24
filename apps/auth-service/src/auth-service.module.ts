@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { JwtModule } from '@nestjs/jwt';
+import { JwtModule, JwtSignOptions } from '@nestjs/jwt';
 import { join } from 'path';
 import { createClient } from 'redis';
 import { AuthServiceController } from './auth-service.controller';
@@ -18,7 +18,10 @@ import { requireJwtSecret } from './jwt-secret';
       // H5: tokens were valid for 90 days with no revocation. Default to a short
       // lifetime, overridable via JWT_EXPIRES_IN (e.g. '7d', '12h'). Cast because
       // @nestjs/jwt types expiresIn as the `ms` StringValue template, not string.
-      signOptions: { expiresIn: (process.env.JWT_EXPIRES_IN || '7d') as any },
+      signOptions: {
+        expiresIn: (process.env.JWT_EXPIRES_IN ||
+          '7d') as JwtSignOptions['expiresIn'],
+      },
     }),
     ConfigModule.forRoot({
       isGlobal: true,
@@ -62,7 +65,10 @@ import { requireJwtSecret } from './jwt-secret';
         options: {
           url: process.env.EMAIL_SERVICE_URL || 'localhost:50052',
           package: 'email',
-          protoPath: join(__dirname, '../../../libs/common/src/proto/email.proto'),
+          protoPath: join(
+            __dirname,
+            '../../../libs/common/src/proto/email.proto',
+          ),
         },
       },
     ]),
@@ -89,4 +95,4 @@ import { requireJwtSecret } from './jwt-secret';
   ],
   exports: ['REDIS_CLIENT'],
 })
-export class AuthServiceModule { }
+export class AuthServiceModule {}

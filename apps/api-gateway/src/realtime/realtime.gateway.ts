@@ -18,7 +18,6 @@ import { Repository } from 'typeorm';
 import { Server, Socket } from 'socket.io';
 import { Alert, Vital } from '../database/entities';
 import { IotDeviceService } from '../iot-device/iot-device.service';
-import { SyncBatchDto } from '../sync/dto/sync-batch.dto';
 import { SyncService } from '../sync/sync.service';
 import { UserSocketRegistry } from './user-socket.registry';
 import { MoistureEpisodeService } from '../alert-policy/moisture-episode.service';
@@ -147,6 +146,12 @@ export class RealtimeGateway
 
     const parsed = Date.parse(String(value));
     return Number.isNaN(parsed) ? Date.now() : parsed;
+  }
+
+  private toText(value: unknown): string {
+    return typeof value === 'string' || typeof value === 'number'
+      ? String(value)
+      : '';
   }
 
   private toOptionalNumber(value: unknown): number | undefined {
@@ -332,7 +337,9 @@ export class RealtimeGateway
         moisture: this.toOptionalNumber(log.moisture),
         gait_label: typeof gaitRaw === 'string' ? gaitRaw : '',
         sos: Boolean(log.sos ?? log.sos_trigger ?? false),
-        thighnode_status: String(log.thighnodeStatus ?? log.thighnode_status ?? ''),
+        thighnode_status: this.toText(
+          log.thighnodeStatus ?? log.thighnode_status,
+        ),
         fall_alert: Boolean(log.fallAlert ?? log.fall_alert ?? false),
         // C1: carry heart_rate / spo2 into the synced reading. C2: tag the device.
         heart_rate: this.toOptionalNumber(log.heartRate ?? log.heart_rate),
@@ -398,7 +405,9 @@ export class RealtimeGateway
         .orIgnore()
         .execute();
     } catch (err) {
-      this.logger.warn(`Failed to save realtime vitals to timeline for device ${deviceId}: ${err}`);
+      this.logger.warn(
+        `Failed to save realtime vitals to timeline for device ${deviceId}: ${err}`,
+      );
     }
 
     // Sensor-driven alerts are not derived from telemetry in the cloud (D-08).
@@ -409,7 +418,10 @@ export class RealtimeGateway
       if (this.moistureEpisodes.enabled) {
         const opened = await this.moistureEpisodes.process(
           deviceId,
-          grpcLogs.map((log) => ({ ts: log.timestamp, moisture: log.moisture })),
+          grpcLogs.map((log) => ({
+            ts: log.timestamp,
+            moisture: log.moisture,
+          })),
         );
         if (opened.length > 0) {
           void this.alertDispatch.kick(opened.map((alert) => alert.id));
@@ -417,7 +429,9 @@ export class RealtimeGateway
       }
     } catch (err) {
       alertWriteFailed = true;
-      this.logger.warn(`Failed to evaluate moisture episodes for device ${deviceId}: ${err}`);
+      this.logger.warn(
+        `Failed to evaluate moisture episodes for device ${deviceId}: ${err}`,
+      );
     }
 
     // Emit a summary instead of echoing the full log array back out — large

@@ -7,6 +7,9 @@ export class QueryDateOptionsDto {
   @ApiPropertyOptional({ example: 'day', enum: ['day', 'week', 'month'] })
   period: 'day' | 'week' | 'month';
 
-  @ApiPropertyOptional({ example: 330, description: 'Device timezone offset in minutes (-getTimezoneOffset())' })
+  @ApiPropertyOptional({
+    example: 330,
+    description: 'Device timezone offset in minutes (-getTimezoneOffset())',
+  })
   tzOffsetMinutes?: number;
 }

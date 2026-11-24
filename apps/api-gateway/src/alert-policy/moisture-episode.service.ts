@@ -9,6 +9,16 @@ import {
   stepEpisode,
 } from './moisture-episode.machine';
 
+type EpisodeRow = {
+  id: string | number;
+  state: EpisodeState['phase'];
+  candidateSince: string | null;
+  openedAt: string | null;
+  belowSince: string | null;
+  closedAt: string | null;
+  lastSampleAt: string | null;
+  peakValue: number | null;
+};
 type Entry = { state: EpisodeState; episodeId: string | null };
 type Sample = { ts: number; moisture?: number | null };
 const UNIQUE_VIOLATION = '23505';
@@ -76,7 +86,7 @@ export class MoistureEpisodeService {
   }
 
   private async load(deviceId: string): Promise<Entry> {
-    const rows: any[] = await this.dataSource.query(
+    const rows: EpisodeRow[] = await this.dataSource.query(
       `SELECT id, state, "candidateSince", "openedAt", "belowSince", "closedAt", "lastSampleAt", "peakValue"
        FROM alert_episodes WHERE "deviceId" = $1 AND type = 'moisture'
        ORDER BY id DESC LIMIT 1`,
@@ -108,7 +118,11 @@ export class MoistureEpisodeService {
     if (event.kind !== 'opened') {
       if (!entry.episodeId) return null;
       const state =
-        event.kind === 'closed' ? 'closed' : event.kind === 'clearing' ? 'clearing' : 'open';
+        event.kind === 'closed'
+          ? 'closed'
+          : event.kind === 'clearing'
+            ? 'clearing'
+            : 'open';
       await this.dataSource.query(
         `UPDATE alert_episodes SET state = $2, "lastSampleAt" = $3,
            "belowSince" = $4, "closedAt" = $5, "peakValue" = $6, "updatedAt" = now()
@@ -128,20 +142,29 @@ export class MoistureEpisodeService {
     const alertId = `moisture_${deviceId}_${event.at}`;
     try {
       return await this.dataSource.transaction(async (manager) => {
-        const [episode] = await manager.query(
+        const [episode] = await manager.query<{ id: string | number }[]>(
           `INSERT INTO alert_episodes ("deviceId", type, state, "candidateSince", "openedAt",
              "lastSampleAt", "peakValue", "alertId", "ruleVersion")
            VALUES ($1, 'moisture', 'open', $2, $3, $3, $4, NULL, $5) RETURNING id`,
-          [deviceId, new Date(event.candidateSince), at, event.peak, this.policy.version],
+          [
+            deviceId,
+            new Date(event.candidateSince),
+            at,
+            event.peak,
+            this.policy.version,
+          ],
         );
-        const inserted = await manager.query(
+        const inserted = await manager.query<{ id: string }[]>(
           `INSERT INTO alerts (id, "deviceId", type, title, timestamp, "isDismissed", "isAttended",
              "isFalseAlarm", "syncSlot", "episodeId")
            VALUES ($1, $2, 'moisture', 'Moisture Detected', $3, false, false, false, 'iot_live', $4)
            ON CONFLICT (id) DO NOTHING RETURNING id`,
           [alertId, deviceId, at, episode.id],
         );
-        await manager.query(`UPDATE alert_episodes SET "alertId" = $2 WHERE id = $1`, [episode.id, alertId]);
+        await manager.query(
+          `UPDATE alert_episodes SET "alertId" = $2 WHERE id = $1`,
+          [episode.id, alertId],
+        );
         entry.episodeId = String(episode.id);
         return inserted.length ? { id: alertId } : null;
       });
@@ -151,7 +174,9 @@ export class MoistureEpisodeService {
         Object.assign(entry, await this.load(deviceId));
         return null;
       }
-      this.logger.warn(`moisture episode persist failed for ${deviceId}: ${String(error)}`);
+      this.logger.warn(
+        `moisture episode persist failed for ${deviceId}: ${String(error)}`,
+      );
       throw error;
     }
   }

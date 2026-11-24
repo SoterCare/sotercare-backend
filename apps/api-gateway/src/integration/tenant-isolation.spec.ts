@@ -41,6 +41,7 @@ function setup() {
       devices,
       { publishNew: jest.fn(), publishUpdated: jest.fn() } as any,
       ownership,
+      db.dataSource() as any,
     ),
     devices: new DevicesService(
       configStub(),

@@ -16,6 +16,7 @@ describe('SyncService', () => {
           },
         }),
       } as any,
+      {} as any,
     );
 
     const result = await service.processRaspberryPiSync(1, {

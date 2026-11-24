@@ -100,7 +100,8 @@ export class AlertsService {
     const alerts = [...byId.values()]
       .sort(
         (a, b) =>
-          SEVERITY_RANK[severityOf(a.type)] - SEVERITY_RANK[severityOf(b.type)] ||
+          SEVERITY_RANK[severityOf(a.type)] -
+            SEVERITY_RANK[severityOf(b.type)] ||
           b.timestamp.getTime() - a.timestamp.getTime(),
       )
       .slice(0, limit);
@@ -195,9 +196,9 @@ export class AlertsService {
          WHERE id = $1 AND "alertId" = $2 AND "userId" = $3 RETURNING id`,
         [dto.notificationAttemptId, alertId, userId, now],
       );
-      const rows = (Array.isArray(result) && Array.isArray(result[0])
-        ? result[0]
-        : result) as { id: string }[];
+      const rows = (
+        Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result
+      ) as { id: string }[];
       attemptId = rows[0]?.id ?? null;
     }
     await this.dataSource.getRepository(AlertAction).insert({
@@ -225,7 +226,11 @@ export class AlertsService {
     const now = new Date();
     const previousState =
       alert.ackAction ??
-      (alert.isDismissed ? 'dismissed' : alert.isAttended ? 'attended' : 'active');
+      (alert.isDismissed
+        ? 'dismissed'
+        : alert.isAttended
+          ? 'attended'
+          : 'active');
 
     const outcome = await this.dataSource.transaction(async (manager) => {
       const updated = await manager.update(

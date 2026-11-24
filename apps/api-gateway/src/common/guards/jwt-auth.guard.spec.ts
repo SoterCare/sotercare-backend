@@ -1,4 +1,5 @@
 import { Controller, Get, Module, UseGuards } from '@nestjs/common';
+import type { Server } from 'http';
 import { Test } from '@nestjs/testing';
 import { PassportModule } from '@nestjs/passport';
 import * as jwt from 'jsonwebtoken';
@@ -33,14 +34,15 @@ describe('JwtAuthGuard', () => {
     app.use(passport.initialize());
     await app.init();
 
-    await request(app.getHttpServer()).get('/protected').expect(401);
+    const server = app.getHttpServer() as Server;
+    await request(server).get('/protected').expect(401);
 
     const token = jwt.sign(
       { userId: 1, email: 'test@example.com', name: 'Test User' },
       process.env.JWT_SECRET as string,
     );
 
-    await request(app.getHttpServer())
+    await request(server)
       .get('/protected')
       .set('Authorization', `Bearer ${token}`)
       .expect(200);

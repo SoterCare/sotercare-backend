@@ -1,15 +1,10 @@
 import { createHash } from 'crypto';
-import { execSync } from 'child_process';
 import { requireJwtSecret } from './jwt-secret';
 
-// The publicly known fallback is read from git history at test time so the
-// literal never has to be written into source again.
+// Placeholder that stands in for the scrubbed public fallback. Its sha256 is in the
+// denylist, so the refusal path is tested without reading git history (CI clones shallow).
 function publicFallback(): string {
-  const blob = execSync(
-    'git show 486c8e6:apps/api-gateway/src/realtime/realtime.module.ts',
-    { encoding: 'utf8' },
-  );
-  return /JWT_SECRET \|\| '([^']*)'/.exec(blob)![1];
+  return 'REMOVED-OLD-PUBLIC-FALLBACK';
 }
 
 describe('requireJwtSecret', () => {

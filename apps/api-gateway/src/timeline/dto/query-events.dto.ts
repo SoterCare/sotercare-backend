@@ -4,7 +4,10 @@ export class QueryTimelineEventsDto {
   @ApiPropertyOptional({ example: 'dev_001' })
   deviceId: string;
 
-  @ApiPropertyOptional({ example: 'day', enum: ['day', 'week', 'month', 'custom'] })
+  @ApiPropertyOptional({
+    example: 'day',
+    enum: ['day', 'week', 'month', 'custom'],
+  })
   period: 'day' | 'week' | 'month' | 'custom';
 
   @ApiPropertyOptional({ example: '2026-03-12' })
@@ -16,9 +19,15 @@ export class QueryTimelineEventsDto {
   @ApiPropertyOptional({ example: '2026-03-15' })
   endDate?: string;
 
-  @ApiPropertyOptional({ example: 'all', enum: ['all', 'movement', 'fall', 'urine', 'temperature', 'moisture'] })
+  @ApiPropertyOptional({
+    example: 'all',
+    enum: ['all', 'movement', 'fall', 'urine', 'temperature', 'moisture'],
+  })
   filter?: 'all' | 'movement' | 'fall' | 'urine' | 'temperature' | 'moisture';
 
-  @ApiPropertyOptional({ example: 330, description: 'Device timezone offset in minutes (-getTimezoneOffset())' })
+  @ApiPropertyOptional({
+    example: 330,
+    description: 'Device timezone offset in minutes (-getTimezoneOffset())',
+  })
   tzOffsetMinutes?: number;
 }

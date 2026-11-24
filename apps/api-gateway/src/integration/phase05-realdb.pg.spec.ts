@@ -66,7 +66,6 @@ import { IotDeviceController } from '../iot-device/iot-device.controller';
 import { IotDevice } from '../iot-device/iot-device.entity';
 import { IotDeviceService } from '../iot-device/iot-device.service';
 import { OwnershipService } from '../ownership/ownership.service';
-import { AlertWriterService } from '../realtime/alert-writer.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { SyncController } from '../sync/sync.controller';
 import { SyncService } from '../sync/sync.service';
@@ -170,7 +169,6 @@ describePg('Phase 0.5 — real PostgreSQL', () => {
         AlertsService,
         DevicesService,
         IotDeviceService,
-        AlertWriterService,
         RealtimeGateway,
         OwnershipService,
         UserSocketRegistry,
@@ -698,21 +696,33 @@ describePg('Phase 0.5 — real PostgreSQL', () => {
     }, 30_000);
     it('does not attribute a gateway replay of pre-transfer readings to the new owner (PH0-07)', async () => {
       const device = await connect();
-      await device.timeout(3000).emitWithAck('device_auth', { device_id: 'dev-alice', device_key: KEY['dev-alice'], timestamp: Date.now() });
+      await device.timeout(3000).emitWithAck('device_auth', {
+        device_id: 'dev-alice',
+        device_key: KEY['dev-alice'],
+        timestamp: Date.now(),
+      });
       const bob = await connect({ auth: { token: token(BOB) } });
       let bobEvents = 0;
       bob.on('device.logs.ingested', () => (bobEvents += 1));
       await iot.unclaimDevice(ALICE, 'dev-alice');
       await iot.claimDevice(BOB, 'dev-alice');
-      const vitalsBefore = await count(`SELECT count(*) n FROM vitals WHERE "deviceId" = 'dev-alice'`);
+      const vitalsBefore = await count(
+        `SELECT count(*) n FROM vitals WHERE "deviceId" = 'dev-alice'`,
+      );
       const ack: any = await device.timeout(3000).emitWithAck('device_data', {
         logs: [{ temp: 36.2, moisture: 2, unix_timestamp: nowSec() - 120 }],
       });
       await new Promise((r) => setTimeout(r, 200));
       expect(ack).toMatchObject({ success: true, dropped_before_ownership: 1 });
       expect(bobEvents).toBe(0);
-      expect(syncLogs).not.toHaveBeenCalledWith(expect.objectContaining({ user_id: BOB }));
-      expect(await count(`SELECT count(*) n FROM vitals WHERE "deviceId" = 'dev-alice'`)).toBe(vitalsBefore);
+      expect(syncLogs).not.toHaveBeenCalledWith(
+        expect.objectContaining({ user_id: BOB }),
+      );
+      expect(
+        await count(
+          `SELECT count(*) n FROM vitals WHERE "deviceId" = 'dev-alice'`,
+        ),
+      ).toBe(vitalsBefore);
     }, 30_000);
   });
 
@@ -733,70 +743,64 @@ describePg('Phase 0.5 — real PostgreSQL', () => {
         .expect(201);
     };
 
-    it(
-      'new owner must not see the previous owner readings in /timeline/vitals',
-      async () => {
-        await transferAliceDeviceToBob();
-        const res = await request(server())
-          .get(
-            `/timeline/vitals?deviceId=dev-alice&metric=temp&period=day&date=${today}`,
-          )
-          .set(auth(BOB))
-          .expect(200);
-        expect(JSON.stringify(res.body)).not.toMatch(/"value":\d/);
-      },
-    );
+    it('new owner must not see the previous owner readings in /timeline/vitals', async () => {
+      await transferAliceDeviceToBob();
+      const res = await request(server())
+        .get(
+          `/timeline/vitals?deviceId=dev-alice&metric=temp&period=day&date=${today}`,
+        )
+        .set(auth(BOB))
+        .expect(200);
+      expect(JSON.stringify(res.body)).not.toMatch(/"value":\d/);
+    });
 
-    it(
-      'new owner must not receive the previous owner last reading from /dashboard/vitals/latest',
-      async () => {
-        await transferAliceDeviceToBob();
-        const res = await request(server())
-          .get('/dashboard/vitals/latest?deviceId=dev-alice')
-          .set(auth(BOB))
-          .expect(200);
-        expect(res.body.data).toBeNull();
-      },
-    );
+    it('new owner must not receive the previous owner last reading from /dashboard/vitals/latest', async () => {
+      await transferAliceDeviceToBob();
+      const res = await request(server())
+        .get('/dashboard/vitals/latest?deviceId=dev-alice')
+        .set(auth(BOB))
+        .expect(200);
+      expect(res.body.data).toBeNull();
+    });
 
-    it(
-      'new owner must not see the previous owner alerts in /timeline/events',
-      async () => {
-        await transferAliceDeviceToBob();
-        const res = await request(server())
-          .get(`/timeline/events?deviceId=dev-alice&period=day&date=${today}`)
-          .set(auth(BOB))
-          .expect(200);
-        expect(JSON.stringify(res.body)).not.toContain('fall_alice_1');
-      },
-    );
+    it('new owner must not see the previous owner alerts in /timeline/events', async () => {
+      await transferAliceDeviceToBob();
+      const res = await request(server())
+        .get(`/timeline/events?deviceId=dev-alice&period=day&date=${today}`)
+        .set(auth(BOB))
+        .expect(200);
+      expect(JSON.stringify(res.body)).not.toContain('fall_alice_1');
+    });
 
-    it(
-      'AI-nurse alert context must not include the previous owner alerts',
-      async () => {
-        const py = fs.readFileSync(
-          path.resolve(
-            __dirname,
-            '../../../ai-summary-service/src/core/nurse_agent.py',
-          ),
-          'utf8',
-        );
-        const sql = /"""\s*(SELECT a\.title[\s\S]*?LIMIT\s+5)\s*"""/
-          .exec(py)![1]
-          .replaceAll('%s', '$1');
-        await ds.query(
-          `UPDATE alerts SET timestamp = now() - interval '1 hour'`,
-        );
-        await transferAliceDeviceToBob();
-        const titles = (await ds.query(sql, [BOB])).length;
-        expect(titles).toBe(3); // Bob's own three, not Alice's
-      },
-    );
+    it('AI-nurse alert context must not include the previous owner alerts', async () => {
+      const py = fs.readFileSync(
+        path.resolve(
+          __dirname,
+          '../../../ai-summary-service/src/core/nurse_agent.py',
+        ),
+        'utf8',
+      );
+      const sql = /"""\s*(SELECT a\.title[\s\S]*?LIMIT\s+5)\s*"""/
+        .exec(py)![1]
+        .replaceAll('%s', '$1');
+      await ds.query(`UPDATE alerts SET timestamp = now() - interval '1 hour'`);
+      await transferAliceDeviceToBob();
+      const titles = (await ds.query(sql, [BOB])).length;
+      expect(titles).toBe(3); // Bob's own three, not Alice's
+    });
     it('leaves exactly one open ownership period after concurrent claims', async () => {
       await iot.unclaimDevice(ALICE, 'dev-alice');
-      await Promise.allSettled(Array.from({ length: 10 }, (_, i) => iot.claimDevice(200 + i, 'dev-alice')));
-      const open = await count(`SELECT count(*) n FROM device_ownerships WHERE "deviceId" = 'dev-alice' AND "endedAt" IS NULL`);
-      const closed = await count(`SELECT count(*) n FROM device_ownerships WHERE "deviceId" = 'dev-alice' AND "endedAt" IS NOT NULL`);
+      await Promise.allSettled(
+        Array.from({ length: 10 }, (_, i) =>
+          iot.claimDevice(200 + i, 'dev-alice'),
+        ),
+      );
+      const open = await count(
+        `SELECT count(*) n FROM device_ownerships WHERE "deviceId" = 'dev-alice' AND "endedAt" IS NULL`,
+      );
+      const closed = await count(
+        `SELECT count(*) n FROM device_ownerships WHERE "deviceId" = 'dev-alice' AND "endedAt" IS NOT NULL`,
+      );
       expect(open).toBe(1);
       expect(closed).toBe(1); // Alice's period is kept, not deleted
     });
@@ -807,9 +811,16 @@ describePg('Phase 0.5 — real PostgreSQL', () => {
         `INSERT INTO vitals ("deviceId", timestamp, temperature, "roomTemperature", moisture, "gaitAnalysis", "syncSlot", "createdAt")
          VALUES ('dev-alice', now(), 41.0, 20, 1, 'legacy', 'iot_live', now() - interval '2 days')`,
       );
-      const res = await request(server()).get('/dashboard/vitals/latest?deviceId=dev-alice').set(auth(ALICE)).expect(200);
+      const res = await request(server())
+        .get('/dashboard/vitals/latest?deviceId=dev-alice')
+        .set(auth(ALICE))
+        .expect(200);
       expect(JSON.stringify(res.body)).not.toContain('41');
-      expect(await count(`SELECT count(*) n FROM vitals WHERE "gaitAnalysis" = 'legacy'`)).toBe(1);
+      expect(
+        await count(
+          `SELECT count(*) n FROM vitals WHERE "gaitAnalysis" = 'legacy'`,
+        ),
+      ).toBe(1);
     });
   });
   // ── E. real-time alert delivery (AR-1 / AR-2 / AR-5) ──────────────────
@@ -845,16 +856,36 @@ describePg('Phase 0.5 — real PostgreSQL', () => {
       const aliceNew = collect(alice, 'alert.new');
       const bobNew = collect(bob, 'alert.new');
       const device = await connectAs();
-      await device.timeout(3000).emitWithAck('device_auth', { device_id: 'dev-alice', device_key: KEY['dev-alice'], timestamp: Date.now() });
-      const frame = { logs: [{ temp: 36.5, moisture: 1, fall_alert: true, sos_trigger: false, unix_timestamp: nowSec() + 1 }] };
+      await device.timeout(3000).emitWithAck('device_auth', {
+        device_id: 'dev-alice',
+        device_key: KEY['dev-alice'],
+        timestamp: Date.now(),
+      });
+      const frame = {
+        logs: [
+          {
+            temp: 36.5,
+            moisture: 1,
+            fall_alert: true,
+            sos_trigger: false,
+            unix_timestamp: nowSec() + 1,
+          },
+        ],
+      };
       await device.timeout(3000).emitWithAck('device_data', frame);
       await device.timeout(3000).emitWithAck('device_data', frame); // duplicate frame
       await settle();
       expect(aliceNew).toHaveLength(1);
-      expect(aliceNew[0]).toMatchObject({ type: 'fall', deviceId: 'dev-alice', severity: 'critical' });
+      expect(aliceNew[0]).toMatchObject({
+        type: 'fall',
+        deviceId: 'dev-alice',
+        severity: 'critical',
+      });
       expect(bobNew).toHaveLength(0);
       expect(
-        await count(`SELECT count(*) n FROM alerts WHERE "deviceId" = 'dev-alice' AND type = 'fall' AND "dispatchState" = 'dispatched'`),
+        await count(
+          `SELECT count(*) n FROM alerts WHERE "deviceId" = 'dev-alice' AND type = 'fall' AND "dispatchState" = 'dispatched'`,
+        ),
       ).toBe(1);
     }, 30_000);
 
@@ -864,67 +895,184 @@ describePg('Phase 0.5 — real PostgreSQL', () => {
       const aliceNew = collect(alice, 'alert.new');
       const bobNew = collect(bob, 'alert.new');
       const device = await connectAs();
-      await device.timeout(3000).emitWithAck('device_auth', { device_id: 'dev-alice', device_key: KEY['dev-alice'], timestamp: Date.now() });
+      await device.timeout(3000).emitWithAck('device_auth', {
+        device_id: 'dev-alice',
+        device_key: KEY['dev-alice'],
+        timestamp: Date.now(),
+      });
       const detectedSec = nowSec() + 1; // postdates the claim made within the current second
       const ev = {
-        schema: 'sotercare.device_event.v1', event_id: '0b5f7c1e-3a2d-4e6f-8a9b-1c2d3e4f5a6b', type: 'fall', device_id: 'dev-alice',
-        detected_at: detectedSec * 1000 + 250, seq: 1, attempt: 1, source: 'udp',
+        schema: 'sotercare.device_event.v1',
+        event_id: '0b5f7c1e-3a2d-4e6f-8a9b-1c2d3e4f5a6b',
+        type: 'fall',
+        device_id: 'dev-alice',
+        detected_at: detectedSec * 1000 + 250,
+        seq: 1,
+        attempt: 1,
+        source: 'udp',
       };
       const ack = await device.timeout(5000).emitWithAck('device_event', ev);
-      expect(ack).toMatchObject({ accepted: true, success: true, event_id: ev.event_id, alert_id: `fall_dev-alice_${detectedSec * 1000}`, duplicate: false });
+      expect(ack).toMatchObject({
+        accepted: true,
+        success: true,
+        event_id: ev.event_id,
+        alert_id: `fall_dev-alice_${detectedSec * 1000}`,
+        duplicate: false,
+      });
       // Gateway retry after a lost ack, and the legacy boolean for the same frame.
-      expect(await device.timeout(5000).emitWithAck('device_event', { ...ev, attempt: 2 })).toMatchObject({ duplicate: true, alert_id: ack.alert_id });
-      await device.timeout(3000).emitWithAck('device_data', { logs: [{ temp: 36.5, moisture: 1, fall_alert: true, sos_trigger: false, unix_timestamp: detectedSec }] });
+      expect(
+        await device
+          .timeout(5000)
+          .emitWithAck('device_event', { ...ev, attempt: 2 }),
+      ).toMatchObject({ duplicate: true, alert_id: ack.alert_id });
+      await device.timeout(3000).emitWithAck('device_data', {
+        logs: [
+          {
+            temp: 36.5,
+            moisture: 1,
+            fall_alert: true,
+            sos_trigger: false,
+            unix_timestamp: detectedSec,
+          },
+        ],
+      });
       await settle();
-      expect(aliceNew).toEqual([expect.objectContaining({ id: ack.alert_id, type: 'fall', severity: 'critical', eventId: ev.event_id })]);
+      expect(aliceNew).toEqual([
+        expect.objectContaining({
+          id: ack.alert_id,
+          type: 'fall',
+          severity: 'critical',
+          eventId: ev.event_id,
+        }),
+      ]);
       expect(bobNew).toHaveLength(0);
       // Seeded fixture alerts are 'skipped'; exactly one live fall row exists.
-      expect(await count(`SELECT count(*) n FROM alerts WHERE "deviceId" = 'dev-alice' AND type = 'fall' AND "dispatchState" <> 'skipped'`)).toBe(1);
-      expect(await count(`SELECT count(*) n FROM device_events WHERE "deviceId" = 'dev-alice'`)).toBe(1);
+      expect(
+        await count(
+          `SELECT count(*) n FROM alerts WHERE "deviceId" = 'dev-alice' AND type = 'fall' AND "dispatchState" <> 'skipped'`,
+        ),
+      ).toBe(1);
+      expect(
+        await count(
+          `SELECT count(*) n FROM device_events WHERE "deviceId" = 'dev-alice'`,
+        ),
+      ).toBe(1);
     }, 30_000);
 
     it('acks device_event from an unauthenticated socket as retryable, never as success (AR-9)', async () => {
       const device = await connectAs();
-      const ack = await device.timeout(3000).emitWithAck('device_event', { schema: 'sotercare.device_event.v1' });
-      expect(ack).toMatchObject({ accepted: false, success: false, retryable: true, reason: 'not_authenticated' });
+      const ack = await device
+        .timeout(3000)
+        .emitWithAck('device_event', { schema: 'sotercare.device_event.v1' });
+      expect(ack).toMatchObject({
+        accepted: false,
+        success: false,
+        retryable: true,
+        reason: 'not_authenticated',
+      });
     });
 
     it('gives internal callers a pipeline snapshot and a per-event trace without secrets or payloads (Workstream I)', async () => {
-      await request(server()).get('/alerts/internal/pipeline-status').set(auth(ALICE)).expect(401);
+      await request(server())
+        .get('/alerts/internal/pipeline-status')
+        .set(auth(ALICE))
+        .expect(401);
       const device = await connectAs();
-      await device.timeout(3000).emitWithAck('device_auth', { device_id: 'dev-alice', device_key: KEY['dev-alice'], timestamp: Date.now() });
+      await device.timeout(3000).emitWithAck('device_auth', {
+        device_id: 'dev-alice',
+        device_key: KEY['dev-alice'],
+        timestamp: Date.now(),
+      });
       const ev = {
-        schema: 'sotercare.device_event.v1', event_id: '5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a', type: 'fall', device_id: 'dev-alice',
-        detected_at: (nowSec() + 1) * 1000, seq: 1, attempt: 1,
+        schema: 'sotercare.device_event.v1',
+        event_id: '5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a',
+        type: 'fall',
+        device_id: 'dev-alice',
+        detected_at: (nowSec() + 1) * 1000,
+        seq: 1,
+        attempt: 1,
       };
       await device.timeout(5000).emitWithAck('device_event', ev);
-      await device.timeout(5000).emitWithAck('device_event', { ...ev, attempt: 2 }); // duplicate
+      await device
+        .timeout(5000)
+        .emitWithAck('device_event', { ...ev, attempt: 2 }); // duplicate
       await settle();
 
-      const res = await request(server()).get('/alerts/internal/pipeline-status').set('X-Internal-Token', INTERNAL_TOKEN).expect(200);
+      const res = await request(server())
+        .get('/alerts/internal/pipeline-status')
+        .set('X-Internal-Token', INTERNAL_TOKEN)
+        .expect(200);
       const s = res.body.data;
-      expect(s.alerts).toEqual(expect.objectContaining({ pendingDispatch: 0, unacknowledgedCritical: expect.any(Number) }));
+      expect(s.alerts).toEqual(
+        expect.objectContaining({
+          pendingDispatch: 0,
+          unacknowledgedCritical: expect.any(Number),
+        }),
+      );
       expect(s.alerts).toHaveProperty('oldestPendingAgeMs');
-      expect(s.alerts.ackLatencyMs).toEqual(expect.objectContaining({ n: expect.any(Number) }));
-      expect(s.deviceEvents.last24h).toEqual(expect.objectContaining({ accepted: 1, quarantined: 0 }));
-      expect(s.deviceEvents.sinceProcessStart.duplicate).toBeGreaterThanOrEqual(1);
-      expect(s.deviceEvents.ingestLagMs).toEqual(expect.objectContaining({ p50: expect.any(Number) }));
-      expect(s.notifications).toEqual(expect.objectContaining({ queued: expect.any(Number), last24hByState: expect.any(Object) }));
+      expect(s.alerts.ackLatencyMs).toEqual(
+        expect.objectContaining({ n: expect.any(Number) }),
+      );
+      expect(s.deviceEvents.last24h).toEqual(
+        expect.objectContaining({ accepted: 1, quarantined: 0 }),
+      );
+      expect(s.deviceEvents.sinceProcessStart.duplicate).toBeGreaterThanOrEqual(
+        1,
+      );
+      expect(s.deviceEvents.ingestLagMs).toEqual(
+        expect.objectContaining({ p50: expect.any(Number) }),
+      );
+      expect(s.notifications).toEqual(
+        expect.objectContaining({
+          queued: expect.any(Number),
+          last24hByState: expect.any(Object),
+        }),
+      );
 
-      await request(server()).get(`/alerts/internal/trace/${ev.event_id}`).expect(401);
-      const trace = await request(server()).get(`/alerts/internal/trace/${ev.event_id}`).set('X-Internal-Token', INTERNAL_TOKEN).expect(200);
-      expect(trace.body.data.event).toMatchObject({ eventId: ev.event_id, deviceId: 'dev-alice', type: 'fall', quarantined: false });
-      expect(trace.body.data.alert).toMatchObject({ id: `fall_dev-alice_${ev.detected_at}`, dispatchState: 'dispatched' });
+      await request(server())
+        .get(`/alerts/internal/trace/${ev.event_id}`)
+        .expect(401);
+      const trace = await request(server())
+        .get(`/alerts/internal/trace/${ev.event_id}`)
+        .set('X-Internal-Token', INTERNAL_TOKEN)
+        .expect(200);
+      expect(trace.body.data.event).toMatchObject({
+        eventId: ev.event_id,
+        deviceId: 'dev-alice',
+        type: 'fall',
+        quarantined: false,
+      });
+      expect(trace.body.data.alert).toMatchObject({
+        id: `fall_dev-alice_${ev.detected_at}`,
+        dispatchState: 'dispatched',
+      });
       expect(Array.isArray(trace.body.data.attempts)).toBe(true);
       expect(Array.isArray(trace.body.data.actions)).toBe(true);
-      expect(JSON.stringify(trace.body)).not.toMatch(/payload|PushToken\[|device_key/);
-      await request(server()).get('/alerts/internal/trace/00000000-0000-4000-8000-000000000000').set('X-Internal-Token', INTERNAL_TOKEN).expect(404);
+      expect(JSON.stringify(trace.body)).not.toMatch(
+        /payload|PushToken\[|device_key/,
+      );
+      await request(server())
+        .get('/alerts/internal/trace/00000000-0000-4000-8000-000000000000')
+        .set('X-Internal-Token', INTERNAL_TOKEN)
+        .expect(404);
     });
 
     it('authenticates the internal webhook and never trusts a user JWT for it', async () => {
-      await request(server()).post('/alerts/internal/alert-ready').set(auth(ALICE)).send({ deviceId: 'dev-alice' }).expect(401);
-      await request(server()).post('/alerts/internal/alert-ready').set('X-Internal-Token', 'wrong').send({ deviceId: 'dev-alice' }).expect(401);
-      await request(server()).post('/alerts/internal/alert-ready').set('X-Internal-Token', INTERNAL_TOKEN).send({ deviceId: 'dev-alice', alertIds: [] }).expect(202);
+      await request(server())
+        .post('/alerts/internal/alert-ready')
+        .set(auth(ALICE))
+        .send({ deviceId: 'dev-alice' })
+        .expect(401);
+      await request(server())
+        .post('/alerts/internal/alert-ready')
+        .set('X-Internal-Token', 'wrong')
+        .send({ deviceId: 'dev-alice' })
+        .expect(401);
+      await request(server())
+        .post('/alerts/internal/alert-ready')
+        .set('X-Internal-Token', INTERNAL_TOKEN)
+        .send({ deviceId: 'dev-alice', alertIds: [] })
+        .expect(202);
     });
 
     it('delivers a Safety-Guard-written alert once via the webhook; repeated webhooks do not duplicate it', async () => {
@@ -932,8 +1080,14 @@ describePg('Phase 0.5 — real PostgreSQL', () => {
       const got = collect(alice, 'alert.new');
       await insertRaw('temperature_dev-alice_sg1', 'dev-alice');
       for (let i = 0; i < 3; i++) {
-        await request(server()).post('/alerts/internal/alert-ready').set('X-Internal-Token', INTERNAL_TOKEN)
-          .send({ deviceId: 'dev-alice', alertIds: ['temperature_dev-alice_sg1'] }).expect(202);
+        await request(server())
+          .post('/alerts/internal/alert-ready')
+          .set('X-Internal-Token', INTERNAL_TOKEN)
+          .send({
+            deviceId: 'dev-alice',
+            alertIds: ['temperature_dev-alice_sg1'],
+          })
+          .expect(202);
       }
       await settle();
       expect(got.map((a) => a.id)).toEqual(['temperature_dev-alice_sg1']);
@@ -951,66 +1105,152 @@ describePg('Phase 0.5 — real PostgreSQL', () => {
       const bob = await connectAs(BOB);
       const got = collect(bob, 'alert.new');
       await insertRaw('temperature_dev-alice_x', 'dev-alice');
-      await request(server()).post('/alerts/internal/alert-ready').set('X-Internal-Token', INTERNAL_TOKEN)
-        .send({ deviceId: 'dev-bob', alertIds: ['temperature_dev-alice_x'] }).expect(202);
+      await request(server())
+        .post('/alerts/internal/alert-ready')
+        .set('X-Internal-Token', INTERNAL_TOKEN)
+        .send({ deviceId: 'dev-bob', alertIds: ['temperature_dev-alice_x'] })
+        .expect(202);
       await settle();
       expect(got).toHaveLength(0);
     });
 
     it('registers, lists (masked), reports and revokes push tokens per user (AR-6)', async () => {
-      const body = { token: 'ExponentPushToken[abcdefghijklmnopqrst]', platform: 'android', installationId: '0b5f7c1e-3a2d-4e6f-8a9b-1c2d3e4f5a6b', appVersion: '1.4.0', permission: 'granted' };
-      await request(server()).post('/notifications/push-tokens').send(body).expect(401);
-      await request(server()).post('/notifications/push-tokens').set(auth(ALICE)).send({ ...body, token: 'not-a-token' }).expect(400);
-      await request(server()).post('/notifications/push-tokens').set(auth(ALICE)).send({ ...body, extra: 1 }).expect(400);
-      const created = await request(server()).post('/notifications/push-tokens').set(auth(ALICE)).send(body).expect(201);
-      expect(created.body.data).toEqual({ id: expect.any(String), registeredAt: expect.any(String) });
-      const status = await request(server()).get('/notifications/status').set(auth(ALICE)).expect(200);
+      const body = {
+        token: 'ExponentPushToken[abcdefghijklmnopqrst]',
+        platform: 'android',
+        installationId: '0b5f7c1e-3a2d-4e6f-8a9b-1c2d3e4f5a6b',
+        appVersion: '1.4.0',
+        permission: 'granted',
+      };
+      await request(server())
+        .post('/notifications/push-tokens')
+        .send(body)
+        .expect(401);
+      await request(server())
+        .post('/notifications/push-tokens')
+        .set(auth(ALICE))
+        .send({ ...body, token: 'not-a-token' })
+        .expect(400);
+      await request(server())
+        .post('/notifications/push-tokens')
+        .set(auth(ALICE))
+        .send({ ...body, extra: 1 })
+        .expect(400);
+      const created = await request(server())
+        .post('/notifications/push-tokens')
+        .set(auth(ALICE))
+        .send(body)
+        .expect(201);
+      expect(created.body.data).toEqual({
+        id: expect.any(String),
+        registeredAt: expect.any(String),
+      });
+      const status = await request(server())
+        .get('/notifications/status')
+        .set(auth(ALICE))
+        .expect(200);
       expect(status.body.data).toEqual({ activeTokens: 1 });
-      const list = await request(server()).get('/notifications/push-tokens').set(auth(ALICE)).expect(200);
+      const list = await request(server())
+        .get('/notifications/push-tokens')
+        .set(auth(ALICE))
+        .expect(200);
       expect(JSON.stringify(list.body)).not.toContain('abcdefghijklmnopqrst');
-      const bobDel = await request(server()).delete(`/notifications/push-tokens/${body.installationId}`).set(auth(BOB)).expect(200);
+      const bobDel = await request(server())
+        .delete(`/notifications/push-tokens/${body.installationId}`)
+        .set(auth(BOB))
+        .expect(200);
       expect(bobDel.body.data).toEqual({ revoked: 0 });
-      const del = await request(server()).delete(`/notifications/push-tokens/${body.installationId}`).set(auth(ALICE)).expect(200);
+      const del = await request(server())
+        .delete(`/notifications/push-tokens/${body.installationId}`)
+        .set(auth(ALICE))
+        .expect(200);
       expect(del.body.data).toEqual({ revoked: 1 });
     });
 
     it('records "seen" from a push without acknowledging, for the owner only (AR-7)', async () => {
       await request(server())
-        .post('/notifications/push-tokens').set(auth(ALICE))
-        .send({ token: 'ExponentPushToken[seenseenseenseen]', platform: 'ios', installationId: '9c8b7a6f-5e4d-4c3b-8a2f-1e0d9c8b7a6f' })
+        .post('/notifications/push-tokens')
+        .set(auth(ALICE))
+        .send({
+          token: 'ExponentPushToken[seenseenseenseen]',
+          platform: 'ios',
+          installationId: '9c8b7a6f-5e4d-4c3b-8a2f-1e0d9c8b7a6f',
+        })
         .expect(201);
       await insertRaw('temperature_dev-alice_seen', 'dev-alice');
       await settle(800); // dispatcher sweep queues the push attempt
-      const [attempt] = await ds.query(`SELECT id FROM notification_attempts WHERE "alertId" = 'temperature_dev-alice_seen'`);
+      const [attempt] = await ds.query(
+        `SELECT id FROM notification_attempts WHERE "alertId" = 'temperature_dev-alice_seen'`,
+      );
       expect(attempt).toBeDefined();
       const url = '/alerts/temperature_dev-alice_seen/seen';
-      await request(server()).post(url).set(auth(BOB)).send({ source: 'push_opened' }).expect(404);
-      await request(server()).post(url).set(auth(ALICE)).send({ source: 'push_opened', status: 'attended' }).expect(400);
-      await request(server()).post(url).set(auth(ALICE)).send({ source: 'push_opened', notificationAttemptId: Number(attempt.id) }).expect(200);
-      const [action] = await ds.query(`SELECT action, source, reason, "notificationAttemptId" FROM alert_actions WHERE "alertId" = 'temperature_dev-alice_seen'`);
-      expect(action).toEqual({ action: 'opened_from_push', source: 'push', reason: 'push_opened', notificationAttemptId: String(attempt.id) });
-      const [a] = await ds.query(`SELECT "acknowledgedAt", "isAttended" FROM alerts WHERE id = 'temperature_dev-alice_seen'`);
+      await request(server())
+        .post(url)
+        .set(auth(BOB))
+        .send({ source: 'push_opened' })
+        .expect(404);
+      await request(server())
+        .post(url)
+        .set(auth(ALICE))
+        .send({ source: 'push_opened', status: 'attended' })
+        .expect(400);
+      await request(server())
+        .post(url)
+        .set(auth(ALICE))
+        .send({
+          source: 'push_opened',
+          notificationAttemptId: Number(attempt.id),
+        })
+        .expect(200);
+      const [action] = await ds.query(
+        `SELECT action, source, reason, "notificationAttemptId" FROM alert_actions WHERE "alertId" = 'temperature_dev-alice_seen'`,
+      );
+      expect(action).toEqual({
+        action: 'opened_from_push',
+        source: 'push',
+        reason: 'push_opened',
+        notificationAttemptId: String(attempt.id),
+      });
+      const [a] = await ds.query(
+        `SELECT "acknowledgedAt", "isAttended" FROM alerts WHERE id = 'temperature_dev-alice_seen'`,
+      );
       expect(a).toEqual({ acknowledgedAt: null, isAttended: false });
-      const [n] = await ds.query(`SELECT "openedAt" FROM notification_attempts WHERE id = $1`, [attempt.id]);
+      const [n] = await ds.query(
+        `SELECT "openedAt" FROM notification_attempts WHERE id = $1`,
+        [attempt.id],
+      );
       expect(n.openedAt).not.toBeNull();
     });
 
     it('lets exactly one of two concurrent acknowledgements win and audits both (AR-4)', async () => {
       await insertRaw('temperature_dev-alice_race', 'dev-alice');
-      const url = (action: string) => `/alerts/temperature_dev-alice_race/${action}`;
+      const url = (action: string) =>
+        `/alerts/temperature_dev-alice_race/${action}`;
       const [a, b] = await Promise.all([
-        request(server()).patch(url('attend')).set(auth(ALICE)).set('X-Client', 'web'),
-        request(server()).patch(url('false-alarm')).set(auth(ALICE)).set('X-Client', 'mobile'),
+        request(server())
+          .patch(url('attend'))
+          .set(auth(ALICE))
+          .set('X-Client', 'web'),
+        request(server())
+          .patch(url('false-alarm'))
+          .set(auth(ALICE))
+          .set('X-Client', 'mobile'),
       ]);
       expect([a.status, b.status].sort()).toEqual([200, 409]);
-      const [row] = await ds.query(`SELECT "ackAction", "acknowledgedAt" FROM alerts WHERE id = 'temperature_dev-alice_race'`);
+      const [row] = await ds.query(
+        `SELECT "ackAction", "acknowledgedAt" FROM alerts WHERE id = 'temperature_dev-alice_race'`,
+      );
       const winner = a.status === 200 ? 'attended' : 'false_alarm';
       expect(row.ackAction).toBe(winner);
       const actions: any[] = await ds.query(
         `SELECT action, source FROM alert_actions WHERE "alertId" = 'temperature_dev-alice_race' ORDER BY id`,
       );
-      expect(actions.map((x) => x.action).sort()).toEqual(['ack_rejected_already_acknowledged', winner].sort());
-      expect(actions.every((x) => x.source === 'web' || x.source === 'mobile')).toBe(true);
+      expect(actions.map((x) => x.action).sort()).toEqual(
+        ['ack_rejected_already_acknowledged', winner].sort(),
+      );
+      expect(
+        actions.every((x) => x.source === 'web' || x.source === 'mobile'),
+      ).toBe(true);
     });
 
     it('broadcasts alert.updated (and the legacy alias) on acknowledgement to the owner only', async () => {
@@ -1020,9 +1260,18 @@ describePg('Phase 0.5 — real PostgreSQL', () => {
       const legacy = collect(alice, 'alert.attended');
       const bobUpdated = collect(bob, 'alert.updated');
       await insertRaw('temperature_dev-alice_ack', 'dev-alice');
-      await request(server()).patch('/alerts/temperature_dev-alice_ack/attend').set(auth(ALICE)).expect(200);
+      await request(server())
+        .patch('/alerts/temperature_dev-alice_ack/attend')
+        .set(auth(ALICE))
+        .expect(200);
       await settle();
-      expect(updated).toEqual([expect.objectContaining({ id: 'temperature_dev-alice_ack', status: 'attended', actorUserId: ALICE })]);
+      expect(updated).toEqual([
+        expect.objectContaining({
+          id: 'temperature_dev-alice_ack',
+          status: 'attended',
+          actorUserId: ALICE,
+        }),
+      ]);
       expect(legacy).toHaveLength(1);
       expect(bobUpdated).toHaveLength(0);
     });
@@ -1031,25 +1280,46 @@ describePg('Phase 0.5 — real PostgreSQL', () => {
       const alice = await connectAs(ALICE);
       const got = collect(alice, 'alert.new');
       const device = await connectAs();
-      await device.timeout(3000).emitWithAck('device_auth', { device_id: 'dev-alice', device_key: KEY['dev-alice'], timestamp: Date.now() });
+      await device.timeout(3000).emitWithAck('device_auth', {
+        device_id: 'dev-alice',
+        device_key: KEY['dev-alice'],
+        timestamp: Date.now(),
+      });
       const start = nowSec() + 1;
       for (let burst = 0; burst < 3; burst++) {
         const logs = Array.from({ length: 30 }, (_, i) => ({
-          temp: 36.5, moisture: 40, fall_alert: false, sos_trigger: false, unix_timestamp: start + burst * 30 + i,
+          temp: 36.5,
+          moisture: 40,
+          fall_alert: false,
+          sos_trigger: false,
+          unix_timestamp: start + burst * 30 + i,
         }));
         await device.timeout(5000).emitWithAck('device_data', { logs });
       }
       await settle();
       expect(got.filter((a) => a.type === 'moisture')).toHaveLength(1);
-      expect(await count(`SELECT count(*) n FROM alerts WHERE "deviceId" = 'dev-alice' AND type = 'moisture'`)).toBe(1);
-      expect(await count(`SELECT count(*) n FROM alert_episodes WHERE "deviceId" = 'dev-alice' AND state = 'open'`)).toBe(1);
+      expect(
+        await count(
+          `SELECT count(*) n FROM alerts WHERE "deviceId" = 'dev-alice' AND type = 'moisture'`,
+        ),
+      ).toBe(1);
+      expect(
+        await count(
+          `SELECT count(*) n FROM alert_episodes WHERE "deviceId" = 'dev-alice' AND state = 'open'`,
+        ),
+      ).toBe(1);
     }, 30_000);
 
     it('lets a client that was offline reconcile from the durable alert list', async () => {
       await insertRaw('temperature_dev-alice_offline', 'dev-alice');
       await settle(800); // dispatched while nobody was connected
-      const res = await request(server()).get('/alerts/recent').set(auth(ALICE)).expect(200);
-      expect(JSON.stringify(res.body)).toContain('temperature_dev-alice_offline');
+      const res = await request(server())
+        .get('/alerts/recent')
+        .set(auth(ALICE))
+        .expect(200);
+      expect(JSON.stringify(res.body)).toContain(
+        'temperature_dev-alice_offline',
+      );
     });
 
     /**
@@ -1058,7 +1328,10 @@ describePg('Phase 0.5 — real PostgreSQL', () => {
      * to this server over Socket.IO. Skipped unless E2E_GATEWAY_PYTHON (a Python
      * with python-socketio) and E2E_GATEWAY_CLI are set. Synthetic device/key.
      */
-    const e2e = process.env.E2E_GATEWAY_PYTHON && process.env.E2E_GATEWAY_CLI ? it : it.skip;
+    const e2e =
+      process.env.E2E_GATEWAY_PYTHON && process.env.E2E_GATEWAY_CLI
+        ? it
+        : it.skip;
     /** One gateway outbox (SQLite file) driven through the real CLI. Each call is a new process. */
     const gatewayHarness = () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'outbox-e2e-'));
@@ -1069,10 +1342,19 @@ describePg('Phase 0.5 — real PostgreSQL', () => {
           execFile(
             process.env.E2E_GATEWAY_PYTHON as string,
             ['-I', process.env.E2E_GATEWAY_CLI as string, ...args],
-            { env: { ...process.env, SOTERCARE_DEVICE_KEY: KEY['dev-alice'] }, timeout: 60_000 },
+            {
+              env: { ...process.env, SOTERCARE_DEVICE_KEY: KEY['dev-alice'] },
+              timeout: 60_000,
+            },
             (error, stdout) => {
-              const lines = stdout.split('\n').filter((l) => l.trim().startsWith('{')).map((l) => JSON.parse(l));
-              resolve({ code: error ? Number((error as any).code ?? 1) : 0, lines });
+              const lines = stdout
+                .split('\n')
+                .filter((l) => l.trim().startsWith('{'))
+                .map((l) => JSON.parse(l));
+              resolve({
+                code: error ? Number((error as any).code ?? 1) : 0,
+                lines,
+              });
             },
           );
         });
@@ -1081,68 +1363,134 @@ describePg('Phase 0.5 — real PostgreSQL', () => {
         outbox,
         cli,
         record: (type: 'fall' | 'sos', detectedAtMs: number) =>
-          cli('record', '--type', type, '--device-id', 'dev-alice', '--detected-at-ms', String(detectedAtMs), '--outbox', outbox),
+          cli(
+            'record',
+            '--type',
+            type,
+            '--device-id',
+            'dev-alice',
+            '--detected-at-ms',
+            String(detectedAtMs),
+            '--outbox',
+            outbox,
+          ),
         status: () => cli('status', '--outbox', outbox),
         flush: (maxSeconds: number, url = baseUrl) =>
-          cli('flush', '--url', url, '--device-id', 'dev-alice', '--outbox', outbox, '--timeout', '5', '--max-seconds', String(maxSeconds)),
+          cli(
+            'flush',
+            '--url',
+            url,
+            '--device-id',
+            'dev-alice',
+            '--outbox',
+            outbox,
+            '--timeout',
+            '5',
+            '--max-seconds',
+            String(maxSeconds),
+          ),
         snapshot: (to: string) => {
           fs.mkdirSync(to, { recursive: true });
-          for (const f of fs.readdirSync(dir)) if (f.startsWith('outbox.db')) fs.copyFileSync(path.join(dir, f), path.join(to, f));
+          for (const f of fs.readdirSync(dir))
+            if (f.startsWith('outbox.db'))
+              fs.copyFileSync(path.join(dir, f), path.join(to, f));
         },
         restore: (from: string) => {
-          for (const f of fs.readdirSync(dir)) if (f.startsWith('outbox.db')) fs.rmSync(path.join(dir, f));
-          for (const f of fs.readdirSync(from)) fs.copyFileSync(path.join(from, f), path.join(dir, f));
+          for (const f of fs.readdirSync(dir))
+            if (f.startsWith('outbox.db')) fs.rmSync(path.join(dir, f));
+          for (const f of fs.readdirSync(from))
+            fs.copyFileSync(path.join(from, f), path.join(dir, f));
         },
         cleanup: () => fs.rmSync(dir, { recursive: true, force: true }),
       };
     };
 
-    e2e('gateway outbox -> backend -> owner: survives a disabled backend and a lost ack, notifies once', async () => {
-      const { dir, cli, flush, snapshot, restore, outbox, cleanup } = gatewayHarness();
+    e2e(
+      'gateway outbox -> backend -> owner: survives a disabled backend and a lost ack, notifies once',
+      async () => {
+        const { dir, cli, flush, snapshot, restore, outbox, cleanup } =
+          gatewayHarness();
 
-      const detectedSec = nowSec() + 1; // postdates the claim made within the current second
-      const rec = await cli('record', '--type', 'fall', '--device-id', 'dev-alice', '--detected-at-ms', String(detectedSec * 1000 + 40), '--outbox', outbox);
-      expect(rec.code).toBe(0);
-      const alertId = `fall_dev-alice_${detectedSec * 1000}`;
+        const detectedSec = nowSec() + 1; // postdates the claim made within the current second
+        const rec = await cli(
+          'record',
+          '--type',
+          'fall',
+          '--device-id',
+          'dev-alice',
+          '--detected-at-ms',
+          String(detectedSec * 1000 + 40),
+          '--outbox',
+          outbox,
+        );
+        expect(rec.code).toBe(0);
+        const alertId = `fall_dev-alice_${detectedSec * 1000}`;
 
-      // 1. Backend switched off: the gateway keeps the event; nothing is written.
-      process.env.DEVICE_EVENTS_ENABLED = 'false';
-      try {
-        const off = await flush(3);
-        expect(off.code).toBe(3);
-        // The CLI reports a retry as e.g. `not accepted: disabled`.
-        expect(off.lines.some((l) => l.outcome === 'retry' && /disabled/.test(String(l.reason)))).toBe(true);
-      } finally {
-        delete process.env.DEVICE_EVENTS_ENABLED;
-      }
-      expect(await count(`SELECT count(*) n FROM device_events`)).toBe(0);
+        // 1. Backend switched off: the gateway keeps the event; nothing is written.
+        process.env.DEVICE_EVENTS_ENABLED = 'false';
+        try {
+          const off = await flush(3);
+          expect(off.code).toBe(3);
+          // The CLI reports a retry as e.g. `not accepted: disabled`.
+          expect(
+            off.lines.some(
+              (l) => l.outcome === 'retry' && /disabled/.test(String(l.reason)),
+            ),
+          ).toBe(true);
+        } finally {
+          delete process.env.DEVICE_EVENTS_ENABLED;
+        }
+        expect(await count(`SELECT count(*) n FROM device_events`)).toBe(0);
 
-      // 2. Backend on: delivered once, to the owner only.
-      const alice = await connectAs(ALICE);
-      const bob = await connectAs(BOB);
-      const aliceNew = collect(alice, 'alert.new');
-      const bobNew = collect(bob, 'alert.new');
-      snapshot(path.join(dir, 'before-ack'));
-      const on = await flush(20);
-      expect(on.code).toBe(0);
-      expect(on.lines.find((l) => l.outcome)).toMatchObject({ outcome: 'acked', alert_id: alertId });
+        // 2. Backend on: delivered once, to the owner only.
+        const alice = await connectAs(ALICE);
+        const bob = await connectAs(BOB);
+        const aliceNew = collect(alice, 'alert.new');
+        const bobNew = collect(bob, 'alert.new');
+        snapshot(path.join(dir, 'before-ack'));
+        const on = await flush(20);
+        expect(on.code).toBe(0);
+        expect(on.lines.find((l) => l.outcome)).toMatchObject({
+          outcome: 'acked',
+          alert_id: alertId,
+        });
 
-      // 3. Gateway crashed after sending but before persisting the ack.
-      restore(path.join(dir, 'before-ack'));
-      const again = await flush(20);
-      expect(again.code).toBe(0);
-      expect(again.lines.find((l) => l.outcome)).toMatchObject({ outcome: 'acked', alert_id: alertId });
+        // 3. Gateway crashed after sending but before persisting the ack.
+        restore(path.join(dir, 'before-ack'));
+        const again = await flush(20);
+        expect(again.code).toBe(0);
+        expect(again.lines.find((l) => l.outcome)).toMatchObject({
+          outcome: 'acked',
+          alert_id: alertId,
+        });
 
-      await settle();
-      expect(aliceNew).toEqual([expect.objectContaining({ id: alertId, type: 'fall', severity: 'critical' })]);
-      expect(bobNew).toHaveLength(0);
-      expect(await count(`SELECT count(*) n FROM device_events WHERE "deviceId" = 'dev-alice'`)).toBe(1);
-      expect(await count(`SELECT count(*) n FROM alerts WHERE id = $1`, [alertId])).toBe(1);
-      // 4. The durable list has it for any client that was offline.
-      const res = await request(server()).get('/alerts/recent').set(auth(ALICE)).expect(200);
-      expect(JSON.stringify(res.body)).toContain(alertId);
-      cleanup();
-    }, 120_000);
+        await settle();
+        expect(aliceNew).toEqual([
+          expect.objectContaining({
+            id: alertId,
+            type: 'fall',
+            severity: 'critical',
+          }),
+        ]);
+        expect(bobNew).toHaveLength(0);
+        expect(
+          await count(
+            `SELECT count(*) n FROM device_events WHERE "deviceId" = 'dev-alice'`,
+          ),
+        ).toBe(1);
+        expect(
+          await count(`SELECT count(*) n FROM alerts WHERE id = $1`, [alertId]),
+        ).toBe(1);
+        // 4. The durable list has it for any client that was offline.
+        const res = await request(server())
+          .get('/alerts/recent')
+          .set(auth(ALICE))
+          .expect(200);
+        expect(JSON.stringify(res.body)).toContain(alertId);
+        cleanup();
+      },
+      120_000,
+    );
 
     /**
      * Workstream J required scenario, steps 1-16. The wearable/firmware hop is
@@ -1150,84 +1498,151 @@ describePg('Phase 0.5 — real PostgreSQL', () => {
      * CLI records exactly what the pipeline hook records). Step 14 uses a test
      * provider; it proves submission bookkeeping, not delivery to a phone.
      */
-    e2e('Workstream J: fall -> outbox -> outage -> restart -> retry -> duplicate -> one alert -> push -> acknowledgement', async () => {
-      const gw = gatewayHarness();
-      const sec = nowSec() + 1; // postdates the claim made within the current second
-      const fallId = `fall_dev-alice_${sec * 1000}`;
-      const sosId = `sos_dev-alice_${(sec + 5) * 1000}`;
-      // Caregiver phones: Alice (owner) and Bob (not authorised for dev-alice).
-      for (const [user, token, installationId] of [
-        [ALICE, 'ExponentPushToken[alicephone0001]', '0b5f7c1e-3a2d-4e6f-8a9b-1c2d3e4f5a6b'],
-        [BOB, 'ExponentPushToken[bobphone000001]', '9c8b7a6f-5e4d-4c3b-8a2f-1e0d9c8b7a6f'],
-      ] as const) {
-        await request(server()).post('/notifications/push-tokens').set(auth(user)).send({ token, platform: 'android', installationId }).expect(201);
-      }
+    e2e(
+      'Workstream J: fall -> outbox -> outage -> restart -> retry -> duplicate -> one alert -> push -> acknowledgement',
+      async () => {
+        const gw = gatewayHarness();
+        const sec = nowSec() + 1; // postdates the claim made within the current second
+        const fallId = `fall_dev-alice_${sec * 1000}`;
+        const sosId = `sos_dev-alice_${(sec + 5) * 1000}`;
+        // Caregiver phones: Alice (owner) and Bob (not authorised for dev-alice).
+        for (const [user, token, installationId] of [
+          [
+            ALICE,
+            'ExponentPushToken[alicephone0001]',
+            '0b5f7c1e-3a2d-4e6f-8a9b-1c2d3e4f5a6b',
+          ],
+          [
+            BOB,
+            'ExponentPushToken[bobphone000001]',
+            '9c8b7a6f-5e4d-4c3b-8a2f-1e0d9c8b7a6f',
+          ],
+        ] as const) {
+          await request(server())
+            .post('/notifications/push-tokens')
+            .set(auth(user))
+            .send({ token, platform: 'android', installationId })
+            .expect(201);
+        }
 
-      // 1-3. Fall reaches the gateway, gets a stable event id and is persisted. A
-      // second event (SOS) makes this a multi-event backlog.
-      expect((await gw.record('fall', sec * 1000 + 40)).code).toBe(0);
-      expect((await gw.record('sos', (sec + 5) * 1000 + 10)).code).toBe(0);
-      const recorded = (await gw.status()).lines[0];
-      expect(recorded).toMatchObject({ pending: 2 });
+        // 1-3. Fall reaches the gateway, gets a stable event id and is persisted. A
+        // second event (SOS) makes this a multi-event backlog.
+        expect((await gw.record('fall', sec * 1000 + 40)).code).toBe(0);
+        expect((await gw.record('sos', (sec + 5) * 1000 + 10)).code).toBe(0);
+        const recorded = (await gw.status()).lines[0];
+        expect(recorded).toMatchObject({ pending: 2 });
 
-      // 4. Cloud unreachable (nothing listens on port 9): connect failure, events kept.
-      expect((await gw.flush(3, 'http://127.0.0.1:9')).code).toBe(1);
-      // 5. Gateway restart: a new process reopens the same SQLite outbox.
-      expect((await gw.status()).lines[0]).toMatchObject({ pending: 2 });
+        // 4. Cloud unreachable (nothing listens on port 9): connect failure, events kept.
+        expect((await gw.flush(3, 'http://127.0.0.1:9')).code).toBe(1);
+        // 5. Gateway restart: a new process reopens the same SQLite outbox.
+        expect((await gw.status()).lines[0]).toMatchObject({ pending: 2 });
 
-      // 6-8. Connectivity restored: the original events are retried and accepted.
-      const alice = await connectAs(ALICE);
-      const bob = await connectAs(BOB);
-      const aliceNew = collect(alice, 'alert.new');
-      const aliceUpdated = collect(alice, 'alert.updated');
-      const bobAll = [...collect(bob, 'alert.new'), ...collect(bob, 'alert.updated')];
-      gw.snapshot(path.join(gw.dir, 'before-ack'));
-      const first = await gw.flush(20);
-      expect(first.code).toBe(0);
-      const acked = first.lines.filter((l) => l.outcome === 'acked');
-      expect(acked.map((l) => l.alert_id).sort()).toEqual([fallId, sosId].sort());
-      const eventIds = acked.map((l) => l.event_id).sort();
+        // 6-8. Connectivity restored: the original events are retried and accepted.
+        const alice = await connectAs(ALICE);
+        const bob = await connectAs(BOB);
+        const aliceNew = collect(alice, 'alert.new');
+        const aliceUpdated = collect(alice, 'alert.updated');
+        const bobAll = [
+          ...collect(bob, 'alert.new'),
+          ...collect(bob, 'alert.updated'),
+        ];
+        gw.snapshot(path.join(gw.dir, 'before-ack'));
+        const first = await gw.flush(20);
+        expect(first.code).toBe(0);
+        const acked = first.lines.filter((l) => l.outcome === 'acked');
+        expect(acked.map((l) => l.alert_id).sort()).toEqual(
+          [fallId, sosId].sort(),
+        );
+        const eventIds = acked.map((l) => l.event_id).sort();
 
-      // 9-10. The acks are lost (gateway state rolled back): same events resent, recognised as duplicates.
-      gw.restore(path.join(gw.dir, 'before-ack'));
-      const again = await gw.flush(20);
-      expect(again.code).toBe(0);
-      expect(again.lines.filter((l) => l.outcome === 'acked').map((l) => l.event_id).sort()).toEqual(eventIds);
+        // 9-10. The acks are lost (gateway state rolled back): same events resent, recognised as duplicates.
+        gw.restore(path.join(gw.dir, 'before-ack'));
+        const again = await gw.flush(20);
+        expect(again.code).toBe(0);
+        expect(
+          again.lines
+            .filter((l) => l.outcome === 'acked')
+            .map((l) => l.event_id)
+            .sort(),
+        ).toEqual(eventIds);
 
-      // 11. Exactly one logical fall alert (and one SOS) for these events.
-      expect(await count(`SELECT count(*) n FROM device_events WHERE "deviceId" = 'dev-alice'`)).toBe(2);
-      expect(await count(`SELECT count(*) n FROM alerts WHERE id = $1`, [fallId])).toBe(1);
-      await settle();
-      expect(aliceNew.filter((a) => a.id === fallId)).toHaveLength(1);
+        // 11. Exactly one logical fall alert (and one SOS) for these events.
+        expect(
+          await count(
+            `SELECT count(*) n FROM device_events WHERE "deviceId" = 'dev-alice'`,
+          ),
+        ).toBe(2);
+        expect(
+          await count(`SELECT count(*) n FROM alerts WHERE id = $1`, [fallId]),
+        ).toBe(1);
+        await settle();
+        expect(aliceNew.filter((a) => a.id === fallId)).toHaveLength(1);
 
-      // 12-13. Only the authorised caregiver's phone has queued attempts.
-      const attempts: any[] = await ds.query(
-        `SELECT n.id, n."userId", n.state FROM notification_attempts n WHERE n."alertId" = $1`, [fallId],
-      );
-      expect(attempts).toEqual([expect.objectContaining({ userId: ALICE, state: 'queued' })]);
+        // 12-13. Only the authorised caregiver's phone has queued attempts.
+        const attempts: any[] = await ds.query(
+          `SELECT n.id, n."userId", n.state FROM notification_attempts n WHERE n."alertId" = $1`,
+          [fallId],
+        );
+        expect(attempts).toEqual([
+          expect.objectContaining({ userId: ALICE, state: 'queued' }),
+        ]);
 
-      // 14. A test provider records the submission (not proof of delivery).
-      const provider = new FakePushProvider();
-      const sender = new NotificationSenderService(ds, app.get(AlertEventsPublisher), provider);
-      await sender.sendDue();
-      expect(provider.sent.filter((m) => m.data.alertId === fallId)).toEqual([
-        expect.objectContaining({ to: 'ExponentPushToken[alicephone0001]', title: 'Possible fall detected', data: { alertId: fallId, attemptId: Number(attempts[0].id) } }),
-      ]);
-      expect(provider.sent.some((m) => m.to.includes('bobphone'))).toBe(false);
+        // 14. A test provider records the submission (not proof of delivery).
+        const provider = new FakePushProvider();
+        const sender = new NotificationSenderService(
+          ds,
+          app.get(AlertEventsPublisher),
+          provider,
+        );
+        await sender.sendDue();
+        expect(provider.sent.filter((m) => m.data.alertId === fallId)).toEqual([
+          expect.objectContaining({
+            to: 'ExponentPushToken[alicephone0001]',
+            title: 'Possible fall detected',
+            data: { alertId: fallId, attemptId: Number(attempts[0].id) },
+          }),
+        ]);
+        expect(provider.sent.some((m) => m.to.includes('bobphone'))).toBe(
+          false,
+        );
 
-      // 15. The caregiver acknowledges through the authorised API (Bob cannot).
-      await request(server()).patch(`/alerts/${fallId}/attend`).set(auth(BOB)).expect(404);
-      await request(server()).patch(`/alerts/${fallId}/attend`).set(auth(ALICE)).set('X-Client', 'mobile').expect(200);
+        // 15. The caregiver acknowledges through the authorised API (Bob cannot).
+        await request(server())
+          .patch(`/alerts/${fallId}/attend`)
+          .set(auth(BOB))
+          .expect(404);
+        await request(server())
+          .patch(`/alerts/${fallId}/attend`)
+          .set(auth(ALICE))
+          .set('X-Client', 'mobile')
+          .expect(200);
 
-      // 16. Persisted, audited and synchronised to the owner's client.
-      const [row] = await ds.query(`SELECT "acknowledgedAt", "acknowledgedByUserId", "ackAction" FROM alerts WHERE id = $1`, [fallId]);
-      expect(row).toMatchObject({ acknowledgedByUserId: ALICE, ackAction: 'attended' });
-      expect(row.acknowledgedAt).not.toBeNull();
-      expect(await count(`SELECT count(*) n FROM alert_actions WHERE "alertId" = $1 AND action = 'attended' AND source = 'mobile'`, [fallId])).toBe(1);
-      await settle();
-      expect(aliceUpdated).toEqual(expect.arrayContaining([expect.objectContaining({ id: fallId, status: 'attended' })]));
-      expect(bobAll).toHaveLength(0);
-      gw.cleanup();
-    }, 180_000);
+        // 16. Persisted, audited and synchronised to the owner's client.
+        const [row] = await ds.query(
+          `SELECT "acknowledgedAt", "acknowledgedByUserId", "ackAction" FROM alerts WHERE id = $1`,
+          [fallId],
+        );
+        expect(row).toMatchObject({
+          acknowledgedByUserId: ALICE,
+          ackAction: 'attended',
+        });
+        expect(row.acknowledgedAt).not.toBeNull();
+        expect(
+          await count(
+            `SELECT count(*) n FROM alert_actions WHERE "alertId" = $1 AND action = 'attended' AND source = 'mobile'`,
+            [fallId],
+          ),
+        ).toBe(1);
+        await settle();
+        expect(aliceUpdated).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ id: fallId, status: 'attended' }),
+          ]),
+        );
+        expect(bobAll).toHaveLength(0);
+        gw.cleanup();
+      },
+      180_000,
+    );
   });
 });

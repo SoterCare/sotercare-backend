@@ -31,7 +31,10 @@ import { NotificationAttemptsService } from '../notifications/notification-attem
         options: {
           url: process.env.HEALTH_SERVICE_URL || 'localhost:50054',
           package: 'health',
-          protoPath: join(__dirname, '../../../../libs/common/src/proto/health.proto'),
+          protoPath: join(
+            __dirname,
+            '../../../../libs/common/src/proto/health.proto',
+          ),
           loader: { keepCase: true, defaults: true, json: true, arrays: true },
           maxReceiveMessageLength: 100 * 1024 * 1024,
           maxSendMessageLength: 100 * 1024 * 1024,

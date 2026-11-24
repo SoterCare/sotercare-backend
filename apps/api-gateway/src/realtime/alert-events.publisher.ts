@@ -55,7 +55,10 @@ export class AlertEventsPublisher {
     return owner.userId;
   }
 
-  async publishNew(alerts: PublishableAlert[], now = new Date()): Promise<number> {
+  async publishNew(
+    alerts: PublishableAlert[],
+    now = new Date(),
+  ): Promise<number> {
     let sent = 0;
     for (const alert of alerts) {
       const userId = await this.recipientFor(alert);

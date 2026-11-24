@@ -33,10 +33,17 @@ export function loadAlertPolicy(): AlertPolicy {
   const policy = JSON.parse(fs.readFileSync(file, 'utf8')) as AlertPolicy;
   const m = policy.moisture;
   if (!(m.closeBelow <= m.openAtOrAbove)) {
-    throw new Error('alert policy: moisture.closeBelow must be <= openAtOrAbove');
+    throw new Error(
+      'alert policy: moisture.closeBelow must be <= openAtOrAbove',
+    );
   }
-  for (const key of ['openHoldSeconds', 'closeHoldSeconds', 'reopenCooldownSeconds'] as const) {
-    if (!(m[key] >= 0)) throw new Error(`alert policy: moisture.${key} must be >= 0`);
+  for (const key of [
+    'openHoldSeconds',
+    'closeHoldSeconds',
+    'reopenCooldownSeconds',
+  ] as const) {
+    if (!(m[key] >= 0))
+      throw new Error(`alert policy: moisture.${key} must be >= 0`);
   }
   return policy;
 }

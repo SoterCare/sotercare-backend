@@ -33,13 +33,22 @@ describe('buildTypeOrmOptions', () => {
   });
 
   it('registers the explicit migration list and only runs it on boot when asked (AR-0)', () => {
-    const off: any = buildTypeOrmOptions(configStub());
+    const off = buildTypeOrmOptions(configStub()) as {
+      migrations: { name: string }[];
+      migrationsTableName: string;
+      migrationsTransactionMode: string;
+      migrationsRun?: boolean;
+    };
     expect(off.migrations).toBe(ALL_MIGRATIONS);
-    expect(off.migrations.map((m: any) => m.name)).toContain('DeviceOwnerships1760500000001');
+    expect(off.migrations.map((m) => m.name)).toContain(
+      'DeviceOwnerships1760500000001',
+    );
     expect(off.migrationsTableName).toBe('typeorm_migrations');
     expect(off.migrationsTransactionMode).toBe('each');
     expect(off.migrationsRun).toBe(false);
-    const on: any = buildTypeOrmOptions(configStub({ RUN_MIGRATIONS_ON_BOOT: 'true' }));
+    const on: any = buildTypeOrmOptions(
+      configStub({ RUN_MIGRATIONS_ON_BOOT: 'true' }),
+    );
     expect(on.migrationsRun).toBe(true);
   });
 });

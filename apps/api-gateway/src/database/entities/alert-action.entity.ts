@@ -17,7 +17,12 @@ export type AlertActionType =
   | 'escalated'
   | 'ack_rejected_already_acknowledged';
 
-export type AlertActionSource = 'mobile' | 'web' | 'push' | 'system' | 'unknown';
+export type AlertActionSource =
+  | 'mobile'
+  | 'web'
+  | 'push'
+  | 'system'
+  | 'unknown';
 
 /**
  * AR-4: append-only audit of every human or system action on an alert

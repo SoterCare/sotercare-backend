@@ -90,7 +90,8 @@ export class VitalSyncService {
             roomTemperature,
             moisture,
             gaitAnalysis,
-            thighnodeStatus: latest.thighnodeStatus ?? latest.thighnode_status ?? null,
+            thighnodeStatus:
+              latest.thighnodeStatus ?? latest.thighnode_status ?? null,
             syncSlot: 'iot_live',
           }),
         )

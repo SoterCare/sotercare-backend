@@ -37,8 +37,14 @@ export class AlertDispatch1760500000002 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE alerts DROP CONSTRAINT IF EXISTS chk_alerts_dispatch_state`,
     );
-    await queryRunner.query(`ALTER TABLE alerts DROP COLUMN IF EXISTS "dispatchNote"`);
-    await queryRunner.query(`ALTER TABLE alerts DROP COLUMN IF EXISTS "dispatchedAt"`);
-    await queryRunner.query(`ALTER TABLE alerts DROP COLUMN IF EXISTS "dispatchState"`);
+    await queryRunner.query(
+      `ALTER TABLE alerts DROP COLUMN IF EXISTS "dispatchNote"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE alerts DROP COLUMN IF EXISTS "dispatchedAt"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE alerts DROP COLUMN IF EXISTS "dispatchState"`,
+    );
   }
 }

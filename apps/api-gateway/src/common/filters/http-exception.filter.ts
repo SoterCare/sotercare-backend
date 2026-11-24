@@ -29,10 +29,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
         return;
       }
 
-      const message =
+      const message: unknown =
         typeof exceptionResponse === 'string'
           ? exceptionResponse
-          : (exceptionResponse as any)?.message ?? exception.message;
+          : ((exceptionResponse as { message?: unknown } | null)?.message ??
+            exception.message);
 
       response.status(status).json({
         success: false,

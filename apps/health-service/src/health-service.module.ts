@@ -46,4 +46,4 @@ import { VitalSign } from './vital-sign.entity';
   controllers: [HealthServiceController],
   providers: [HealthServiceService],
 })
-export class HealthServiceModule { }
+export class HealthServiceModule {}

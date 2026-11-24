@@ -8,10 +8,12 @@ import { SyncService } from '../sync/sync.service';
 // Equality plus the FindOperators the services use (MoreThanOrEqual, IsNull).
 function matchesValue(currentValue: unknown, value: unknown): boolean {
   if (value instanceof FindOperator) {
-    const op = value as FindOperator<any>;
+    const op = value;
     const cmp = (v: any) => (v instanceof Date ? v.getTime() : v);
-    if (op.type === 'moreThanOrEqual') return cmp(currentValue) >= cmp(op.value);
-    if (op.type === 'isNull') return currentValue === null || currentValue === undefined;
+    if (op.type === 'moreThanOrEqual')
+      return cmp(currentValue) >= cmp(op.value);
+    if (op.type === 'isNull')
+      return currentValue === null || currentValue === undefined;
     throw new Error(`unsupported operator ${op.type}`);
   }
   if (currentValue instanceof Date && value instanceof Date) {
@@ -92,8 +94,8 @@ class MemoryRepository<T extends Record<string, any>> {
 
     if (options?.where) {
       results = results.filter((item) =>
-        Object.entries(options.where ?? {}).every(
-          ([key, value]) => matchesValue(item[key as keyof T], value),
+        Object.entries(options.where ?? {}).every(([key, value]) =>
+          matchesValue(item[key as keyof T], value),
         ),
       );
     }
@@ -174,13 +176,15 @@ describe('Sync to read flow', () => {
         const repo = repositories.get(entity.name);
         if (!repo) return Promise.resolve([]);
         const where = options?.where ?? {};
-        const rows = repo.find().filter((item: any) =>
-          Object.entries(where).every(([key, value]: [string, any]) =>
-            value instanceof FindOperator
-              ? (value.value as any[]).includes(item[key])
-              : item[key] === value,
-          ),
-        );
+        const rows = repo
+          .find()
+          .filter((item: any) =>
+            Object.entries(where).every(([key, value]: [string, any]) =>
+              value instanceof FindOperator
+                ? (value.value as any[]).includes(item[key])
+                : item[key] === value,
+            ),
+          );
         return Promise.resolve(rows);
       },
       upsert: (entity: any, rows: any[]) => {
@@ -324,7 +328,10 @@ describe('Sync to read flow', () => {
     const latestVitals = await dashboardService.getLatestVitals(1, 'dev_001');
 
     expect(devices.devices[0].id).toBe('dev_001');
-    expect(devices.devices[0]?.latestStatus?.battery).toBe(82);
+    expect(
+      (devices.devices[0] as { latestStatus?: { battery?: number } })
+        .latestStatus?.battery,
+    ).toBe(82);
     expect(latestVitals?.temperature).toBe(30.4);
   });
 });

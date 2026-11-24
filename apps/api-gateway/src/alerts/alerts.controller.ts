@@ -53,7 +53,9 @@ export class AlertsController {
   }
 
   @Get('attended')
-  @ApiOperation({ summary: 'Get alerts the user has confirmed and attended to' })
+  @ApiOperation({
+    summary: 'Get alerts the user has confirmed and attended to',
+  })
   @ApiQuery({ name: 'deviceId', required: false, type: String })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async getAttendedAlerts(

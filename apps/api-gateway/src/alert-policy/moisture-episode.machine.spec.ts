@@ -19,7 +19,10 @@ const P: MoisturePolicy = {
 };
 
 /** Feed (secondOffset, value) samples; return the events emitted. */
-function run(samples: [number, number][], state: EpisodeState = initialEpisodeState()) {
+function run(
+  samples: [number, number][],
+  state: EpisodeState = initialEpisodeState(),
+) {
   const events: string[] = [];
   for (const [s, v] of samples) {
     const r = stepEpisode(state, { ts: s * 1000, value: v }, P);
@@ -32,8 +35,16 @@ function run(samples: [number, number][], state: EpisodeState = initialEpisodeSt
   return { events, state };
 }
 
-const range = (from: number, to: number, value: number, step = 1): [number, number][] =>
-  Array.from({ length: Math.floor((to - from) / step) + 1 }, (_, i) => [from + i * step, value]);
+const range = (
+  from: number,
+  to: number,
+  value: number,
+  step = 1,
+): [number, number][] =>
+  Array.from({ length: Math.floor((to - from) / step) + 1 }, (_, i) => [
+    from + i * step,
+    value,
+  ]);
 
 describe('moisture episode machine (AR-3)', () => {
   it('stays quiet below the opening threshold (24.9 %)', () => {
@@ -47,7 +58,9 @@ describe('moisture episode machine (AR-3)', () => {
   });
 
   it('does not open on a flapping signal that never stays above the threshold for the hold time', () => {
-    const flapping = range(0, 120, 0).map(([s]) => [s, s % 8 < 6 ? 30 : 20] as [number, number]);
+    const flapping = range(0, 120, 0).map(
+      ([s]) => [s, s % 8 < 6 ? 30 : 20] as [number, number],
+    );
     expect(run(flapping).events).toEqual([]);
   });
 
@@ -61,7 +74,10 @@ describe('moisture episode machine (AR-3)', () => {
     const wet = range(0, 20, 40);
     const briefDip = [...range(21, 60, 10), ...range(61, 70, 40)]; // dip shorter than 120 s
     const dry = range(71, 300, 5);
-    expect(run([...wet, ...briefDip, ...dry]).events).toEqual(['opened@10', 'closed@191']);
+    expect(run([...wet, ...briefDip, ...dry]).events).toEqual([
+      'opened@10',
+      'closed@191',
+    ]);
   });
 
   it('reopens the same episode without a new alert inside the cooldown, and opens a new episode after it', () => {
@@ -69,7 +85,14 @@ describe('moisture episode machine (AR-3)', () => {
     const reentryInCooldown = range(200, 230, 40);
     const dryAgain = range(231, 400, 5); // closes again @351
     const reentryAfterCooldown = range(1300, 1320, 40); // > 900 s after 351
-    expect(run([...first, ...reentryInCooldown, ...dryAgain, ...reentryAfterCooldown]).events).toEqual([
+    expect(
+      run([
+        ...first,
+        ...reentryInCooldown,
+        ...dryAgain,
+        ...reentryAfterCooldown,
+      ]).events,
+    ).toEqual([
       'opened@10',
       'closed@141',
       'reopened@200',
@@ -80,7 +103,14 @@ describe('moisture episode machine (AR-3)', () => {
 
   it('ignores out-of-order, duplicate and invalid samples', () => {
     const { events } = run([
-      [0, 40], [5, 40], [5, 40], [3, 40], [7, Number.NaN], [8, 140], [9, -1], [10, 40],
+      [0, 40],
+      [5, 40],
+      [5, 40],
+      [3, 40],
+      [7, Number.NaN],
+      [8, 140],
+      [9, -1],
+      [10, 40],
     ]);
     expect(events).toEqual(['opened@10']);
   });

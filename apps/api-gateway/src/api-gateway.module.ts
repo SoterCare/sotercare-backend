@@ -67,7 +67,10 @@ const GRPC_CHANNEL_OPTIONS = {
         options: {
           url: process.env.AUTH_SERVICE_URL || 'localhost:50051',
           package: 'auth',
-          protoPath: join(__dirname, '../../../libs/common/src/proto/auth.proto'),
+          protoPath: join(
+            __dirname,
+            '../../../libs/common/src/proto/auth.proto',
+          ),
           channelOptions: GRPC_CHANNEL_OPTIONS,
         },
       },
@@ -77,7 +80,10 @@ const GRPC_CHANNEL_OPTIONS = {
         options: {
           url: process.env.HEALTH_SERVICE_URL || 'localhost:50054',
           package: 'health',
-          protoPath: join(__dirname, '../../../libs/common/src/proto/health.proto'),
+          protoPath: join(
+            __dirname,
+            '../../../libs/common/src/proto/health.proto',
+          ),
           loader: {
             keepCase: true,
             defaults: true,

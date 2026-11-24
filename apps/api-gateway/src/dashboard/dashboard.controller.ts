@@ -23,7 +23,10 @@ export class DashboardController {
     @CurrentUser() user: { userId: number },
     @Query('deviceId') deviceId: string,
   ) {
-    const data = await this.dashboardService.getLatestVitals(user.userId, deviceId);
+    const data = await this.dashboardService.getLatestVitals(
+      user.userId,
+      deviceId,
+    );
 
     if (!data) {
       return {

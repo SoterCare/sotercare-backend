@@ -5,7 +5,8 @@ import { Resend } from 'resend';
 export class EmailServiceService {
   private readonly logger = new Logger(EmailServiceService.name);
   private readonly resend: Resend;
-  private readonly sendTimeoutMs = Number(process.env.EMAIL_SEND_TIMEOUT_MS) || 8000;
+  private readonly sendTimeoutMs =
+    Number(process.env.EMAIL_SEND_TIMEOUT_MS) || 8000;
 
   constructor() {
     const apiKey = process.env.RESEND_API_KEY;
@@ -18,7 +19,11 @@ export class EmailServiceService {
     this.resend = new Resend(apiKey);
   }
 
-  async sendEmail(email: string, otp: string, name?: string): Promise<{ success: boolean; message: string }> {
+  async sendEmail(
+    email: string,
+    otp: string,
+    name?: string,
+  ): Promise<{ success: boolean; message: string }> {
     if (!email || !otp) {
       // Reject early instead of paying for a doomed Resend round-trip.
       this.logger.warn('Rejected OTP email: missing email or otp');
@@ -26,7 +31,9 @@ export class EmailServiceService {
     }
 
     const displayName = name || 'there';
-    this.logger.log(`Sending OTP Email to ${name ? name + ' <' + email + '>' : email}`);
+    this.logger.log(
+      `Sending OTP Email to ${name ? name + ' <' + email + '>' : email}`,
+    );
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -136,7 +143,10 @@ export class EmailServiceService {
    * Bounds an async operation so a slow/hung Resend call can't stall the gRPC
    * response — which sits on the critical path of login/registration upstream.
    */
-  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  private async withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+  ): Promise<T> {
     let timer: NodeJS.Timeout;
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(

@@ -1,4 +1,5 @@
-import { HttpException } from '@nestjs/common';
+import { ExecutionContext, HttpException } from '@nestjs/common';
+import type { RedisClientType } from 'redis';
 import { AuthThrottleGuard } from './auth-throttle.guard';
 
 /**
@@ -10,20 +11,23 @@ describe('AuthThrottleGuard', () => {
       switchToHttp: () => ({
         getRequest: () => ({ ip, headers: {}, socket: {} }),
       }),
-    }) as any;
+    }) as unknown as ExecutionContext;
 
   function makeGuard(limit: number) {
     process.env.AUTH_THROTTLE_LIMIT = String(limit);
     const counts = new Map<string, number>();
-    const redis: any = {
-      incr: jest.fn(async (k: string) => {
+    const redis = {
+      incr: jest.fn((k: string) => {
         const n = (counts.get(k) ?? 0) + 1;
         counts.set(k, n);
-        return n;
+        return Promise.resolve(n);
       }),
-      expire: jest.fn(async () => {}),
+      expire: jest.fn(() => Promise.resolve()),
     };
-    return { guard: new AuthThrottleGuard(redis), redis };
+    return {
+      guard: new AuthThrottleGuard(redis as unknown as RedisClientType),
+      redis,
+    };
   }
 
   afterEach(() => {
@@ -54,13 +58,11 @@ describe('AuthThrottleGuard', () => {
 
   it('fails open when Redis errors', async () => {
     process.env.AUTH_THROTTLE_LIMIT = '1';
-    const redis: any = {
-      incr: jest.fn(async () => {
-        throw new Error('redis down');
-      }),
+    const redis = {
+      incr: jest.fn(() => Promise.reject(new Error('redis down'))),
       expire: jest.fn(),
     };
-    const guard = new AuthThrottleGuard(redis);
+    const guard = new AuthThrottleGuard(redis as unknown as RedisClientType);
     await expect(guard.canActivate(ctxFor('5.5.5.5'))).resolves.toBe(true);
   });
 });
