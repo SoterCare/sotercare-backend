@@ -6,7 +6,7 @@ import {
   MaxLength,
 } from 'class-validator';
 
-/** Mirrors contracts/v1/push_token_register.request.schema.json. */
+/** Request body for registering a push token. */
 export class RegisterPushTokenDto {
   @IsString()
   @MaxLength(255)

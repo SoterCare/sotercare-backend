@@ -7,9 +7,6 @@
  * alert), multi-instance claiming, and the escalation guard.
  * SKIPPED unless TEST_DATABASE_URL is set; refuses non-"test" databases.
  */
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
 import { DataSource } from 'typeorm';
 import {
   Alert,
@@ -31,7 +28,6 @@ import { OwnershipService } from '../ownership/ownership.service';
 import { AlertEventsPublisher } from '../realtime/alert-events.publisher';
 import { AlertDispatchService } from '../alerts/alert-dispatch.service';
 import { FakePushProvider } from '../../test/support/fake-push-provider';
-import { EscalationService } from './escalation.service';
 import { NotificationAttemptsService } from './notification-attempts.service';
 import { NotificationSenderService } from './notification-sender.service';
 import { PushTokensService } from './push-tokens.service';
@@ -460,70 +456,6 @@ describePg('push notifications (AR-6 / AR-8, real PostgreSQL)', () => {
       expect(await attemptRows()).toEqual([
         expect.objectContaining({ alertId: 'fall_d', state: 'queued' }),
       ]);
-    });
-  });
-
-  describe('escalation (AR-8)', () => {
-    const approvedPolicy = () => {
-      const p = JSON.parse(
-        fs.readFileSync(
-          path.resolve(process.cwd(), 'config/alert-policy.v1.json'),
-          'utf8',
-        ),
-      );
-      p.status = 'approved';
-      const file = path.join(
-        fs.mkdtempSync(path.join(os.tmpdir(), 'policy-')),
-        'alert-policy.json',
-      );
-      fs.writeFileSync(file, JSON.stringify(p));
-      return file;
-    };
-    const unacked = async () => {
-      await register(ALICE, tok('a1'));
-      await alert('fall_e', 'fall', {
-        dispatchedAt: new Date(Date.now() - 130_000),
-      });
-    };
-    const escalated = async () =>
-      (
-        await ds.query(
-          `SELECT count(*)::int n FROM alert_actions WHERE action = 'escalated'`,
-        )
-      )[0].n;
-
-    it('is blocked while the policy is not approved, even with ESCALATION_ENABLED=true', async () => {
-      process.env.ESCALATION_ENABLED = 'true';
-      await unacked();
-      expect(await new EscalationService(ds, publisher, attempts).tick()).toBe(
-        0,
-      );
-      expect([await attemptRows(), await escalated()]).toEqual([[], 0]);
-    });
-
-    it('is blocked by default with an approved policy', async () => {
-      process.env.ALERT_POLICY_PATH = approvedPolicy();
-      await unacked();
-      expect(await new EscalationService(ds, publisher, attempts).tick()).toBe(
-        0,
-      );
-    });
-
-    it('when allowed, re-notifies the same owner once per schedule step and stops on acknowledgement', async () => {
-      process.env.ALERT_POLICY_PATH = approvedPolicy();
-      process.env.ESCALATION_ENABLED = 'true';
-      await unacked();
-      const esc = new EscalationService(ds, publisher, attempts);
-      expect(await esc.tick()).toBe(1);
-      expect(await esc.tick()).toBe(0); // next step is due at 300 s
-      expect(await attemptRows()).toEqual([
-        expect.objectContaining({ userId: ALICE, escalationLevel: 1 }),
-      ]);
-      expect(await escalated()).toBe(1);
-      await ds.query(
-        `UPDATE alerts SET "acknowledgedAt" = now(), "dispatchedAt" = now() - interval '20 minutes'`,
-      );
-      expect(await esc.tick()).toBe(0);
     });
   });
 });

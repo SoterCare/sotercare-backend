@@ -1,6 +1,6 @@
 import { IsIn, IsInt, IsOptional, Min } from 'class-validator';
 
-/** Mirrors contracts/v1/alert_seen.request.schema.json. */
+/** Request body for marking an alert seen. */
 export class AlertSeenDto {
   @IsIn(['push_foreground', 'push_opened', 'in_app'])
   source: 'push_foreground' | 'push_opened' | 'in_app';

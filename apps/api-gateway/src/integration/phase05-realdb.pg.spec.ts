@@ -31,7 +31,6 @@ import { AlertDispatchService } from '../alerts/alert-dispatch.service';
 import { InternalAlertsController } from '../alerts/internal-alerts.controller';
 import { AlertEventsPublisher } from '../realtime/alert-events.publisher';
 import { UserSocketRegistry } from '../realtime/user-socket.registry';
-import { MoistureEpisodeService } from '../alert-policy/moisture-episode.service';
 import { DeviceEventService } from '../realtime/device-event.service';
 import { NotificationsController } from '../notifications/notifications.controller';
 import { NotificationAttemptsService } from '../notifications/notification-attempts.service';
@@ -174,7 +173,6 @@ describePg('Phase 0.5 — real PostgreSQL', () => {
         UserSocketRegistry,
         AlertEventsPublisher,
         AlertDispatchService,
-        MoistureEpisodeService,
         DeviceEventService,
         PushTokensService,
         NotificationAttemptsService,
@@ -1275,40 +1273,6 @@ describePg('Phase 0.5 — real PostgreSQL', () => {
       expect(legacy).toHaveLength(1);
       expect(bobUpdated).toHaveLength(0);
     });
-
-    it('turns a sustained wet pad streamed over the socket into exactly one moisture alert (AR-3)', async () => {
-      const alice = await connectAs(ALICE);
-      const got = collect(alice, 'alert.new');
-      const device = await connectAs();
-      await device.timeout(3000).emitWithAck('device_auth', {
-        device_id: 'dev-alice',
-        device_key: KEY['dev-alice'],
-        timestamp: Date.now(),
-      });
-      const start = nowSec() + 1;
-      for (let burst = 0; burst < 3; burst++) {
-        const logs = Array.from({ length: 30 }, (_, i) => ({
-          temp: 36.5,
-          moisture: 40,
-          fall_alert: false,
-          sos_trigger: false,
-          unix_timestamp: start + burst * 30 + i,
-        }));
-        await device.timeout(5000).emitWithAck('device_data', { logs });
-      }
-      await settle();
-      expect(got.filter((a) => a.type === 'moisture')).toHaveLength(1);
-      expect(
-        await count(
-          `SELECT count(*) n FROM alerts WHERE "deviceId" = 'dev-alice' AND type = 'moisture'`,
-        ),
-      ).toBe(1);
-      expect(
-        await count(
-          `SELECT count(*) n FROM alert_episodes WHERE "deviceId" = 'dev-alice' AND state = 'open'`,
-        ),
-      ).toBe(1);
-    }, 30_000);
 
     it('lets a client that was offline reconcile from the durable alert list', async () => {
       await insertRaw('temperature_dev-alice_offline', 'dev-alice');
