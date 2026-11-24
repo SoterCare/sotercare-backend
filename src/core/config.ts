@@ -17,7 +17,7 @@ export function loadConfig(e: NodeJS.ProcessEnv = process.env): AppConfig {
     env,
     region: e.AWS_REGION ?? 'ap-south-1',
     port,
-    controlDatabaseUrl: e.CONTROL_DATABASE_URL,
+    controlDatabaseUrl: e.CONTROL_DB_URL ?? e.CONTROL_DATABASE_URL,
     redisUrl: e.REDIS_URL,
   };
 }
