@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative } from 'path';
 
 const ROOT = join(__dirname, '..', '..');
@@ -12,6 +12,7 @@ const BANNED = [
 ];
 
 function walk(dir: string, out: string[]) {
+  if (!existsSync(dir)) return;
   for (const name of readdirSync(dir)) {
     if (name === 'node_modules' || name === 'dist') continue;
     const p = join(dir, name);
