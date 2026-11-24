@@ -11,7 +11,6 @@ import { VitalSyncService } from './vital-sync.service';
 import { UserSocketRegistry } from './user-socket.registry';
 import { AlertEventsPublisher } from './alert-events.publisher';
 import { AlertDispatchService } from '../alerts/alert-dispatch.service';
-import { MoistureEpisodeService } from '../alert-policy/moisture-episode.service';
 import { DeviceEventService } from './device-event.service';
 import { NotificationAttemptsService } from '../notifications/notification-attempts.service';
 
@@ -48,7 +47,6 @@ import { NotificationAttemptsService } from '../notifications/notification-attem
     UserSocketRegistry,
     AlertEventsPublisher,
     AlertDispatchService,
-    MoistureEpisodeService,
     DeviceEventService,
     NotificationAttemptsService,
   ],

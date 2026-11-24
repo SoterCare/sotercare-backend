@@ -18,7 +18,7 @@ import {
 import { RealtimeGateway } from './realtime.gateway';
 import { OwnershipService } from '../ownership/ownership.service';
 
-function setup(over: { episodes?: any } = {}) {
+function setup() {
   const db = createPhase0Db();
   const iot = new IotDeviceService(
     configStub(),
@@ -50,8 +50,6 @@ function setup(over: { episodes?: any } = {}) {
       emitToUser: jest.fn(),
     } as any,
     { kick: jest.fn().mockResolvedValue(0) } as any,
-    over.episodes ??
-      ({ enabled: false, process: jest.fn().mockResolvedValue([]) } as any),
     { ingest: jest.fn() } as any,
   );
   gateway.afterInit();
@@ -161,24 +159,5 @@ describe('RealtimeGateway device_data after an ownership change', () => {
     const ack: any = await gateway.handleDeviceData(client, replayed);
     expect(ack).toMatchObject({ success: true, dropped_before_ownership: 1 });
     expect(syncLogs).not.toHaveBeenCalled();
-  });
-});
-
-describe('RealtimeGateway device_data ack when alert evaluation fails', () => {
-  // A strict gateway (STRICT_ACK=1) buffers and resends on a non-success ack;
-  // alert ids are deterministic, so the resend cannot duplicate alerts.
-  it('does not report success when moisture episode evaluation failed', async () => {
-    const { gateway, client, batch } = setup({
-      episodes: {
-        enabled: true,
-        process: jest.fn().mockRejectedValue(new Error('db down')),
-      },
-    });
-    const ack: any = await gateway.handleDeviceData(client, batch);
-    expect(ack).toMatchObject({
-      success: false,
-      retryable: true,
-      error: 'alert_write_failed',
-    });
   });
 });

@@ -20,7 +20,6 @@ import { Alert, Vital } from '../database/entities';
 import { IotDeviceService } from '../iot-device/iot-device.service';
 import { SyncService } from '../sync/sync.service';
 import { UserSocketRegistry } from './user-socket.registry';
-import { MoistureEpisodeService } from '../alert-policy/moisture-episode.service';
 import { AlertDispatchService } from '../alerts/alert-dispatch.service';
 import { DeviceEventService } from './device-event.service';
 
@@ -88,7 +87,6 @@ export class RealtimeGateway
     private readonly alertRepository: Repository<Alert>,
     private readonly socketRegistry: UserSocketRegistry,
     private readonly alertDispatch: AlertDispatchService,
-    private readonly moistureEpisodes: MoistureEpisodeService,
     private readonly deviceEvents: DeviceEventService,
   ) {}
 
@@ -411,28 +409,6 @@ export class RealtimeGateway
     }
 
     // Sensor-driven alerts are not derived from telemetry in the cloud (D-08).
-    let alertWriteFailed = false;
-
-    // AR-3: moisture is evaluated as episodes (one alert per wet condition).
-    try {
-      if (this.moistureEpisodes.enabled) {
-        const opened = await this.moistureEpisodes.process(
-          deviceId,
-          grpcLogs.map((log) => ({
-            ts: log.timestamp,
-            moisture: log.moisture,
-          })),
-        );
-        if (opened.length > 0) {
-          void this.alertDispatch.kick(opened.map((alert) => alert.id));
-        }
-      }
-    } catch (err) {
-      alertWriteFailed = true;
-      this.logger.warn(
-        `Failed to evaluate moisture episodes for device ${deviceId}: ${err}`,
-      );
-    }
 
     // Emit a summary instead of echoing the full log array back out — large
     // batches were doubling the payload on the user-facing socket.
@@ -450,15 +426,6 @@ export class RealtimeGateway
       },
       ingested_at: new Date().toISOString(),
     });
-
-    if (alertWriteFailed) {
-      return {
-        success: false,
-        retryable: true,
-        error: 'alert_write_failed',
-        device_id: deviceId,
-      };
-    }
 
     return {
       success: true,

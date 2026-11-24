@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager } from 'typeorm';
-import { loadAlertPolicy } from '../alert-policy/alert-policy';
 import { AlertEventsPublisher } from '../realtime/alert-events.publisher';
 import { rowsOf } from './db-rows';
 
@@ -32,10 +31,8 @@ export class NotificationAttemptsService {
     manager?: EntityManager,
   ): Promise<number> {
     const db = manager ?? this.dataSource;
-    const push = pushPolicy();
     let created = 0;
     for (const alert of alerts) {
-      if (push[alert.type] === false) continue;
       const userId = await this.recipients.recipientFor(alert);
       if (userId === null) continue;
       const inserted = rowsOf<{ id: string }>(
@@ -65,13 +62,5 @@ export class NotificationAttemptsService {
       }
     }
     return created;
-  }
-}
-
-function pushPolicy(): Record<string, boolean> {
-  try {
-    return loadAlertPolicy().notifications.push;
-  } catch {
-    return {}; // unreadable policy: push every type (fail towards notifying)
   }
 }
