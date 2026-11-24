@@ -31,7 +31,7 @@ function setup() {
     (r) => {
       created.push(r.tenantId);
       const ds: TenantDataSource = {
-        query: () => Promise.resolve([]),
+        query: () => Promise.resolve([] as never),
         destroy: () => {
           destroyed.push(r.tenantId);
           return Promise.resolve();
