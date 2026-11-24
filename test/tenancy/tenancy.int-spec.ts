@@ -69,7 +69,10 @@ d('tenancy (local Postgres)', () => {
   });
 
   const ctx = (tenantId: string) => ({ tenantId, actor: 'u', requestId: 'r' });
-  const q = (tenantId: string, sql: string) =>
+  const q = (
+    tenantId: string,
+    sql: string,
+  ): Promise<Record<string, unknown>[]> =>
     TenantContext.run(ctx(tenantId), async () =>
       (await new TenantDb(registry).get()).query(sql),
     );
