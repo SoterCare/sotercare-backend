@@ -1,3 +1,4 @@
+import type { ExecutionContext } from '@nestjs/common';
 import { lastValueFrom, of } from 'rxjs';
 import { FakeClock, SystemClock } from '../../src/core/clock';
 import { NoTenantContext, TenantContext } from '../../src/core/context';
@@ -91,9 +92,14 @@ describe('ids', () => {
 describe('config', () => {
   it('parses env and rejects missing required values', () => {
     expect(
-      loadConfig({ NODE_ENV: 'test', AWS_REGION: 'ap-south-1' } as any).region,
+      loadConfig({
+        NODE_ENV: 'test',
+        AWS_REGION: 'ap-south-1',
+      } as unknown as NodeJS.ProcessEnv).region,
     ).toBe('ap-south-1');
-    expect(() => loadConfig({ NODE_ENV: 'nope' } as any)).toThrow();
+    expect(() =>
+      loadConfig({ NODE_ENV: 'nope' } as unknown as NodeJS.ProcessEnv),
+    ).toThrow();
   });
 });
 
@@ -109,7 +115,7 @@ describe('IdempotencyInterceptor', () => {
         }),
         getResponse: () => ({ statusCode: 201 }),
       }),
-    }) as any;
+    }) as unknown as ExecutionContext;
 
   it('returns stored response for same key and body', async () => {
     const i = new IdempotencyInterceptor(

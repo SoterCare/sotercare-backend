@@ -30,12 +30,21 @@ export const IDEMPOTENCY_STORE = Symbol('IDEMPOTENCY_STORE');
 
 export class InMemoryIdempotencyStore implements IdempotencyStore {
   private rows = new Map<string, StoredIdempotency>();
-  async get(k: string) {
-    return this.rows.get(k);
+  get(k: string): Promise<StoredIdempotency | undefined> {
+    return Promise.resolve(this.rows.get(k));
   }
-  async put(k: string, row: StoredIdempotency) {
+  put(k: string, row: StoredIdempotency): Promise<void> {
     this.rows.set(k, row);
+    return Promise.resolve();
   }
+}
+
+interface IdempotentRequest {
+  method: string;
+  url?: string;
+  body?: unknown;
+  headers?: Record<string, string | undefined>;
+  route?: { path?: string };
 }
 
 @Injectable()
@@ -49,7 +58,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
     context: ExecutionContext,
     next: CallHandler,
   ): Promise<Observable<unknown>> {
-    const req = context.switchToHttp().getRequest();
+    const req = context.switchToHttp().getRequest<IdempotentRequest>();
     const key = req.headers?.['idempotency-key'];
     if (!key || !GUARDED.includes(req.method)) return next.handle();
 
