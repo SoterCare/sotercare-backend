@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 
-// Polyfill for TypeORM/NestJS requiring global crypto in Node 18
-if (!(global as any).crypto) {
-    (global as any).crypto = crypto;
+// Only set global crypto when missing (Node 20+ already defines a getter-backed global crypto).
+const globalWithCrypto = global as unknown as { crypto?: unknown };
+if (!globalWithCrypto.crypto) {
+  globalWithCrypto.crypto = crypto;
 }

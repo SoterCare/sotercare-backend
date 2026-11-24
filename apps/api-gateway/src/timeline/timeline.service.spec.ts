@@ -33,6 +33,7 @@ function mockQueryBuilder(rawRows: unknown[]) {
     addSelect: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
+    setParameter: jest.fn().mockReturnThis(),
     groupBy: jest.fn().mockReturnThis(),
     orderBy: jest.fn().mockReturnThis(),
     getRawMany: jest.fn().mockResolvedValue(rawRows),
@@ -58,11 +59,9 @@ describe('TimelineService', () => {
 
   it('aggregates day vitals into hourly points', async () => {
     // The hourly AVG now happens in SQL; the DB returns one row per bucket.
-    // Hour 00 contains readings 36.5 and 37.5 -> AVG = 37 (pg returns strings).
+    // Hour 0 (integer local-hour bucket) contains readings 36.5 and 37.5 -> AVG = 37 (pg returns strings).
     vitalRepository.createQueryBuilder.mockReturnValue(
-      mockQueryBuilder([
-        { bucket: new Date('2026-03-12T00:00:00.000Z'), value: '37' },
-      ]),
+      mockQueryBuilder([{ bucket: 0, value: '37' }]),
     );
 
     const result = await service.getVitalsTimeline(1, {

@@ -21,7 +21,12 @@ export type MoisturePolicy = {
   reopenCooldownSeconds: number;
 };
 
-export type EpisodePhase = 'none' | 'candidate' | 'open' | 'clearing' | 'closed';
+export type EpisodePhase =
+  | 'none'
+  | 'candidate'
+  | 'open'
+  | 'clearing'
+  | 'closed';
 
 export type EpisodeState = {
   phase: EpisodePhase;
@@ -59,7 +64,10 @@ export function stepEpisode(
   policy: MoisturePolicy,
 ): { state: EpisodeState; event?: EpisodeEvent } {
   const { ts, value } = sample;
-  if (!isValid(value) || (state.lastSampleAt !== null && ts <= state.lastSampleAt)) {
+  if (
+    !isValid(value) ||
+    (state.lastSampleAt !== null && ts <= state.lastSampleAt)
+  ) {
     return { state };
   }
   const s: EpisodeState = { ...state, lastSampleAt: ts };
@@ -76,12 +84,24 @@ export function stepEpisode(
         ts - s.closedAt < policy.reopenCooldownSeconds * 1000;
       if (inCooldown) {
         return {
-          state: { ...s, phase: 'open', closedAt: null, belowSince: null, peak: Math.max(s.peak ?? 0, value) },
+          state: {
+            ...s,
+            phase: 'open',
+            closedAt: null,
+            belowSince: null,
+            peak: Math.max(s.peak ?? 0, value),
+          },
           event: { kind: 'reopened', at: ts },
         };
       }
       return {
-        state: { ...initialEpisodeState(), phase: 'candidate', candidateSince: ts, lastSampleAt: ts, peak: value },
+        state: {
+          ...initialEpisodeState(),
+          phase: 'candidate',
+          candidateSince: ts,
+          lastSampleAt: ts,
+          peak: value,
+        },
       };
     }
     case 'candidate': {
@@ -92,26 +112,42 @@ export function stepEpisode(
       if (ts - (s.candidateSince as number) >= policy.openHoldSeconds * 1000) {
         return {
           state: { ...s, phase: 'open', openedAt: ts, peak },
-          event: { kind: 'opened', at: ts, candidateSince: s.candidateSince as number, peak },
+          event: {
+            kind: 'opened',
+            at: ts,
+            candidateSince: s.candidateSince as number,
+            peak,
+          },
         };
       }
       return { state: { ...s, peak } };
     }
     case 'open': {
       if (dry) {
-        return { state: { ...s, phase: 'clearing', belowSince: ts }, event: { kind: 'clearing', at: ts } };
+        return {
+          state: { ...s, phase: 'clearing', belowSince: ts },
+          event: { kind: 'clearing', at: ts },
+        };
       }
       return { state: { ...s, peak: Math.max(s.peak ?? 0, value) } };
     }
     case 'clearing': {
       if (!dry) {
         return {
-          state: { ...s, phase: 'open', belowSince: null, peak: Math.max(s.peak ?? 0, value) },
+          state: {
+            ...s,
+            phase: 'open',
+            belowSince: null,
+            peak: Math.max(s.peak ?? 0, value),
+          },
           event: { kind: 'resumed', at: ts },
         };
       }
       if (ts - (s.belowSince as number) >= policy.closeHoldSeconds * 1000) {
-        return { state: { ...s, phase: 'closed', closedAt: ts, belowSince: null }, event: { kind: 'closed', at: ts } };
+        return {
+          state: { ...s, phase: 'closed', closedAt: ts, belowSince: null },
+          event: { kind: 'closed', at: ts },
+        };
       }
       return { state: s };
     }

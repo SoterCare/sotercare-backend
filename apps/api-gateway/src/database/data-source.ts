@@ -15,7 +15,9 @@ import {
 import { IotDevice } from '../iot-device/iot-device.entity';
 import { buildTypeOrmOptions } from './typeorm-options';
 
-const env = { get: (key: string, fallback?: string) => process.env[key] ?? fallback };
+const env = {
+  get: (key: string, fallback?: string) => process.env[key] ?? fallback,
+};
 const base = buildTypeOrmOptions(env as never) as DataSourceOptions & {
   autoLoadEntities?: boolean;
 };
@@ -25,5 +27,14 @@ export default new DataSource({
   ...base,
   synchronize: false,
   migrationsRun: false,
-  entities: [Alert, Device, DeviceOwnership, DeviceStatus, RecordingSession, SyncHistory, Vital, IotDevice],
+  entities: [
+    Alert,
+    Device,
+    DeviceOwnership,
+    DeviceStatus,
+    RecordingSession,
+    SyncHistory,
+    Vital,
+    IotDevice,
+  ],
 });

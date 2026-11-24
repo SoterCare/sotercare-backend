@@ -233,7 +233,6 @@ export class HealthController implements OnModuleInit {
       timestamp: log.data.timestamp,
     }));
 
-
     return lastValueFrom(
       this.healthService
         .syncLogs({ user_id: userId, logs: grpcLogs })
@@ -328,7 +327,7 @@ export class HealthController implements OnModuleInit {
       latest,
       time_range:
         grpcLogs.length > 0
-          ? { from: grpcLogs[0].timestamp, to: latest!.timestamp }
+          ? { from: grpcLogs[0].timestamp, to: latest.timestamp }
           : null,
       ingested_at: new Date().toISOString(),
     });

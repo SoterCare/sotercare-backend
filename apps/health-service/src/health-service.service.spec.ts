@@ -1,3 +1,5 @@
+import { Repository } from 'typeorm';
+import { VitalSign } from './vital-sign.entity';
 import { HealthServiceService } from './health-service.service';
 
 /**
@@ -5,20 +7,30 @@ import { HealthServiceService } from './health-service.service';
  * persisted VitalSign rows, inserts are de-duplicated via orIgnore, and the
  * response uses the proto-correct `synced_count` field.
  */
+interface QbMock {
+  insert: () => QbMock;
+  into: () => QbMock;
+  values: (v: VitalSign[]) => QbMock;
+  orIgnore: jest.Mock<QbMock, []>;
+  execute: jest.Mock<Promise<{ identifiers: { id: number }[] }>, []>;
+}
+
 describe('HealthServiceService.syncLogs', () => {
   function makeService() {
-    const captured: { values?: any[] } = {};
-    const qb: any = {
+    const captured: { values?: VitalSign[] } = {};
+    const qb: QbMock = {
       insert: () => qb,
       into: () => qb,
-      values: (v: any[]) => {
+      values: (v: VitalSign[]) => {
         captured.values = v;
         return qb;
       },
       orIgnore: jest.fn(() => qb),
-      execute: jest.fn(async () => ({ identifiers: [{ id: 1 }] })),
+      execute: jest.fn(() => Promise.resolve({ identifiers: [{ id: 1 }] })),
     };
-    const repo: any = { createQueryBuilder: () => qb };
+    const repo = {
+      createQueryBuilder: () => qb,
+    } as unknown as Repository<VitalSign>;
     return { service: new HealthServiceService(repo), captured, qb };
   }
 
@@ -46,7 +58,13 @@ describe('HealthServiceService.syncLogs', () => {
     const { service, captured } = makeService();
 
     await service.syncLogs(1, [
-      { heartRate: 60, spo2: 99, deviceId: 'd2', temperature: 36, timestamp: 1 },
+      {
+        heartRate: 60,
+        spo2: 99,
+        deviceId: 'd2',
+        temperature: 36,
+        timestamp: 1,
+      },
     ]);
 
     const row = captured.values![0];
@@ -57,9 +75,7 @@ describe('HealthServiceService.syncLogs', () => {
   it('de-duplicates via orIgnore and returns synced_count (not syncedCount)', async () => {
     const { service, qb } = makeService();
 
-    const res = await service.syncLogs(1, [
-      { temperature: 36, timestamp: 1 },
-    ]);
+    const res = await service.syncLogs(1, [{ temperature: 36, timestamp: 1 }]);
 
     expect(qb.orIgnore).toHaveBeenCalled();
     expect(res).toHaveProperty('synced_count', 1);

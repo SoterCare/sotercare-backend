@@ -99,8 +99,22 @@ export function createPhase0Db(now = new Date()) {
   // Ownership periods (PH0-07): both owners hold an open interval that began
   // before any fixture data, so existing expectations are unchanged.
   db.seed(DeviceOwnership, [
-    { deviceId: 'dev-alice', userId: ALICE, startedAt: OWNED_SINCE, endedAt: null, startReason: 'claim', endReason: null },
-    { deviceId: 'dev-bob', userId: BOB, startedAt: OWNED_SINCE, endedAt: null, startReason: 'claim', endReason: null },
+    {
+      deviceId: 'dev-alice',
+      userId: ALICE,
+      startedAt: OWNED_SINCE,
+      endedAt: null,
+      startReason: 'claim',
+      endReason: null,
+    },
+    {
+      deviceId: 'dev-bob',
+      userId: BOB,
+      startedAt: OWNED_SINCE,
+      endedAt: null,
+      startReason: 'claim',
+      endReason: null,
+    },
   ]);
   db.seed(Vital, [
     {

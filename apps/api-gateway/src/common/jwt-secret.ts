@@ -5,6 +5,8 @@ import { createHash } from 'crypto';
 // stored here. Any token signed with them must be treated as forgeable.
 const KNOWN_PUBLIC_SECRET_SHA256 = new Set<string>([
   '4cac9eaf4f5835a64d77390e1f675c9b18df2159892ba0ecef3b820042000356',
+  // Placeholder left in history once the real value was scrubbed from it.
+  '2bfa2a6fa8724471b3bf26369afb9455a94d4f4657bb7aa0260d1657c9d27ca2',
 ]);
 
 const MIN_PRODUCTION_SECRET_LENGTH = 32;

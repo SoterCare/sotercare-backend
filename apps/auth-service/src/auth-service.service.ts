@@ -14,7 +14,7 @@ export class AuthServiceService {
     private userRepository: Repository<User>,
     @Inject('REDIS_CLIENT')
     private redisClient: RedisClientType,
-  ) { }
+  ) {}
 
   // H7: OTP brute-force protection. After OTP_MAX_ATTEMPTS wrong codes for an
   // email, lock verification for OTP_LOCKOUT_SECONDS. State lives in Redis so it
@@ -108,7 +108,7 @@ export class AuthServiceService {
   /** Tolerates corrupted Redis values instead of throwing an opaque gRPC error. */
   private safeParse(data: string): { name?: string; otp?: string } | null {
     try {
-      return JSON.parse(data);
+      return JSON.parse(data) as { name?: string; otp?: string } | null;
     } catch {
       this.logger.warn('Failed to parse temp registration data from Redis');
       return null;
@@ -146,7 +146,12 @@ export class AuthServiceService {
     return this.userRepository.findOneBy({ email });
   }
 
-  async updateUser(id: number, name: string, email: string, mobileNumber: string): Promise<{ success: boolean; message: string }> {
+  async updateUser(
+    id: number,
+    name: string,
+    email: string,
+    mobileNumber: string,
+  ): Promise<{ success: boolean; message: string }> {
     const user = await this.userRepository.findOneBy({ id });
     if (!user) {
       return { success: false, message: 'User not found' };
@@ -172,7 +177,10 @@ export class AuthServiceService {
     return this.userRepository.findOneBy({ id });
   }
 
-  async initiateEmailUpdate(userId: number, newEmail: string): Promise<{ success: boolean; message: string; otp?: string }> {
+  async initiateEmailUpdate(
+    userId: number,
+    newEmail: string,
+  ): Promise<{ success: boolean; message: string; otp?: string }> {
     // Check if user exists
     const user = await this.userRepository.findOneBy({ id: userId });
     if (!user) {
@@ -181,30 +189,51 @@ export class AuthServiceService {
 
     // Check if new email is same as current
     if (user.email === newEmail) {
-      return { success: false, message: 'New email is the same as current email' };
+      return {
+        success: false,
+        message: 'New email is the same as current email',
+      };
     }
 
     // Check if new email is already taken by another user
-    const existingUser = await this.userRepository.findOneBy({ email: newEmail });
+    const existingUser = await this.userRepository.findOneBy({
+      email: newEmail,
+    });
     if (existingUser) {
-      return { success: false, message: 'Email already in use by another account' };
+      return {
+        success: false,
+        message: 'Email already in use by another account',
+      };
     }
 
     // Generate OTP and store in Redis
     const otp = this.generateOtp();
     const key = `email_update:${userId}:${newEmail}`;
     await this.redisClient.set(key, otp, { EX: 300 }); // 5 min expiry
-    this.logger.log(`[InitiateEmailUpdate] Stored email-update OTP for user ${userId} (${newEmail})`);
+    this.logger.log(
+      `[InitiateEmailUpdate] Stored email-update OTP for user ${userId} (${newEmail})`,
+    );
 
-    return { success: true, message: 'Verification OTP sent to new email', otp };
+    return {
+      success: true,
+      message: 'Verification OTP sent to new email',
+      otp,
+    };
   }
 
-  async verifyEmailUpdate(userId: number, newEmail: string, otp: string): Promise<{ success: boolean; message: string }> {
+  async verifyEmailUpdate(
+    userId: number,
+    newEmail: string,
+    otp: string,
+  ): Promise<{ success: boolean; message: string }> {
     const key = `email_update:${userId}:${newEmail}`;
     const storedOtp = await this.redisClient.get(key);
 
     if (!storedOtp) {
-      return { success: false, message: 'No pending email update or OTP expired' };
+      return {
+        success: false,
+        message: 'No pending email update or OTP expired',
+      };
     }
 
     if (storedOtp !== otp) {
@@ -221,7 +250,9 @@ export class AuthServiceService {
     await this.userRepository.save(user);
     await this.redisClient.del(key); // Cleanup
 
-    this.logger.log(`[VerifyEmailUpdate] User ${userId} email updated to ${newEmail}`);
+    this.logger.log(
+      `[VerifyEmailUpdate] User ${userId} email updated to ${newEmail}`,
+    );
     return { success: true, message: 'Email updated successfully' };
   }
 }

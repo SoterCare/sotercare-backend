@@ -1,0 +1,13 @@
+{
+  "sensitivePaths": [
+    "apps/**/auth/**",
+    "apps/auth-service/**",
+    "apps/**/internal/**",
+    "apps/**/service-token/**",
+    "apps/**/billing/**",
+    "apps/**/payhere/**",
+    "**/*secret*",
+    "**/*.pem",
+    ".github/workflows/**"
+  ]
+}

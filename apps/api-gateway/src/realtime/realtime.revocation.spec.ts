@@ -18,9 +18,7 @@ import {
 import { RealtimeGateway } from './realtime.gateway';
 import { OwnershipService } from '../ownership/ownership.service';
 
-function setup(
-  over: { writer?: any; episodes?: any } = {},
-) {
+function setup(over: { episodes?: any } = {}) {
   const db = createPhase0Db();
   const iot = new IotDeviceService(
     configStub(),
@@ -43,12 +41,17 @@ function setup(
     {} as any,
     iot,
     {} as any,
-    over.writer ?? ({ writeAlertsForLogs: jest.fn().mockResolvedValue([]) } as any),
     { create: (row: any) => row, createQueryBuilder: () => insertChain } as any,
     {} as any,
-    { attach: jest.fn(), add: jest.fn(), remove: jest.fn(), emitToUser: jest.fn() } as any,
+    {
+      attach: jest.fn(),
+      add: jest.fn(),
+      remove: jest.fn(),
+      emitToUser: jest.fn(),
+    } as any,
     { kick: jest.fn().mockResolvedValue(0) } as any,
-    over.episodes ?? ({ enabled: false, process: jest.fn().mockResolvedValue([]) } as any),
+    over.episodes ??
+      ({ enabled: false, process: jest.fn().mockResolvedValue([]) } as any),
     { ingest: jest.fn() } as any,
   );
   gateway.afterInit();
@@ -147,7 +150,13 @@ describe('RealtimeGateway device_data after an ownership change', () => {
     await iot.unclaimDevice(ALICE, 'dev-alice');
     await iot.claimDevice(BOB, 'dev-alice');
     const replayed = {
-      logs: [{ temp: 36.1, moisture: 3, unix_timestamp: Math.floor(Date.now() / 1000) - 60 }],
+      logs: [
+        {
+          temp: 36.1,
+          moisture: 3,
+          unix_timestamp: Math.floor(Date.now() / 1000) - 60,
+        },
+      ],
     };
     const ack: any = await gateway.handleDeviceData(client, replayed);
     expect(ack).toMatchObject({ success: true, dropped_before_ownership: 1 });
@@ -158,19 +167,18 @@ describe('RealtimeGateway device_data after an ownership change', () => {
 describe('RealtimeGateway device_data ack when alert evaluation fails', () => {
   // A strict gateway (STRICT_ACK=1) buffers and resends on a non-success ack;
   // alert ids are deterministic, so the resend cannot duplicate alerts.
-  it('does not report success when the fall/SOS alert write failed', async () => {
-    const { gateway, client, batch } = setup({
-      writer: { writeAlertsForLogs: jest.fn().mockRejectedValue(new Error('db down')) },
-    });
-    const ack: any = await gateway.handleDeviceData(client, batch);
-    expect(ack).toMatchObject({ success: false, retryable: true, error: 'alert_write_failed' });
-  });
-
   it('does not report success when moisture episode evaluation failed', async () => {
     const { gateway, client, batch } = setup({
-      episodes: { enabled: true, process: jest.fn().mockRejectedValue(new Error('db down')) },
+      episodes: {
+        enabled: true,
+        process: jest.fn().mockRejectedValue(new Error('db down')),
+      },
     });
     const ack: any = await gateway.handleDeviceData(client, batch);
-    expect(ack).toMatchObject({ success: false, retryable: true, error: 'alert_write_failed' });
+    expect(ack).toMatchObject({
+      success: false,
+      retryable: true,
+      error: 'alert_write_failed',
+    });
   });
 });

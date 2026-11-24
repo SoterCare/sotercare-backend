@@ -93,7 +93,10 @@ describe('Phase 0 security over HTTP', () => {
         { provide: ConfigService, useValue: configStub() },
         { provide: getDataSourceToken(), useValue: db.dataSource() },
         { provide: RealtimeGateway, useValue: { emitToUser: jest.fn() } },
-        { provide: AlertEventsPublisher, useValue: { publishNew: jest.fn(), publishUpdated: jest.fn() } },
+        {
+          provide: AlertEventsPublisher,
+          useValue: { publishNew: jest.fn(), publishUpdated: jest.fn() },
+        },
         ...[
           Device,
           Vital,

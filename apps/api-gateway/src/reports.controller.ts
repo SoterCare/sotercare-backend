@@ -60,7 +60,11 @@ interface HealthService {
     user_id: number;
     start_date: string;
     end_date: string;
-  }): Observable<any>;
+  }): Observable<{ logs?: unknown[] }>;
+}
+
+interface AuthedRequest {
+  user: { userId: number };
 }
 
 // Cap how long we'll wait on the health-service, and how wide a range a report
@@ -89,7 +93,7 @@ export class ReportsController implements OnModuleInit {
   @Post('export')
   @ApiOperation({ summary: 'Get report data (logs) for a date range' })
   @ApiBody({ type: ExportReportDto })
-  async exportReport(@Body() body: ExportReportDto, @Req() req: any) {
+  async exportReport(@Body() body: ExportReportDto, @Req() req: AuthedRequest) {
     const userId = req.user.userId;
 
     const start = new Date(body.startDate).getTime();
@@ -134,7 +138,7 @@ export class ReportsController implements OnModuleInit {
 
   @Get('devices')
   @ApiOperation({ summary: 'Get minimal device list for report dropdowns' })
-  async getReportDevices(@Req() req: any) {
+  async getReportDevices(@Req() req: AuthedRequest) {
     return {
       success: true,
       data: await this.devicesService.getDevices(req.user.userId, false, true),

@@ -82,7 +82,9 @@ export class TimelineService {
     end: Date,
     unit: 'hour' | 'day',
     since: Date,
-  ): Promise<{ bucket: Date | string | number; value: string | number | null }[]> {
+  ): Promise<
+    { bucket: Date | string | number; value: string | number | null }[]
+  > {
     // For day view: bucket by local hour (0-23) relative to the local midnight
     // represented by `start`. This gives correct local-time hour labels
     // regardless of the server or database timezone.
@@ -122,7 +124,10 @@ export class TimelineService {
 
   /** Day view: 24 hourly slots, null where the hour has no data. */
   private mapHourlyBuckets(
-    buckets: { bucket: Date | string | number; value: string | number | null }[],
+    buckets: {
+      bucket: Date | string | number;
+      value: string | number | null;
+    }[],
   ) {
     const byHour = new Map<number, number>();
     for (const row of buckets) {
@@ -141,7 +146,10 @@ export class TimelineService {
 
   /** Multi-day view: one point per day, trimmed of leading/trailing empty days. */
   private mapDailyBuckets(
-    buckets: { bucket: Date | string | number; value: string | number | null }[],
+    buckets: {
+      bucket: Date | string | number;
+      value: string | number | null;
+    }[],
     start: Date,
     end: Date,
   ) {
@@ -435,8 +443,12 @@ export class TimelineService {
     const tzMs = tzOffsetMinutes * 60_000;
 
     if (period === 'custom' && startDate && endDate) {
-      const start = new Date(new Date(`${startDate}T00:00:00.000Z`).getTime() - tzMs);
-      const end   = new Date(new Date(`${endDate}T00:00:00.000Z`).getTime() - tzMs + 86_400_000 - 1);
+      const start = new Date(
+        new Date(`${startDate}T00:00:00.000Z`).getTime() - tzMs,
+      );
+      const end = new Date(
+        new Date(`${endDate}T00:00:00.000Z`).getTime() - tzMs + 86_400_000 - 1,
+      );
       return { start, end };
     }
 
@@ -447,23 +459,27 @@ export class TimelineService {
       const [year, monthNumber] = monthValue.split('-').map(Number);
       // Month boundaries: local midnight on day 1 → local midnight on last day+1
       const start = new Date(Date.UTC(year, monthNumber - 1, 1) - tzMs);
-      const end   = new Date(Date.UTC(year, monthNumber,     0) - tzMs + 86_400_000 - 1);
+      const end = new Date(
+        Date.UTC(year, monthNumber, 0) - tzMs + 86_400_000 - 1,
+      );
       return { start, end };
     }
 
     const anchorDateString = date || new Date().toISOString().split('T')[0];
 
     if (period === 'week') {
-      const anchorLocalMidnight = new Date(`${anchorDateString}T00:00:00.000Z`).getTime() - tzMs;
+      const anchorLocalMidnight =
+        new Date(`${anchorDateString}T00:00:00.000Z`).getTime() - tzMs;
       const start = new Date(anchorLocalMidnight - 6 * 86_400_000);
-      const end   = new Date(anchorLocalMidnight + 86_400_000 - 1);
+      const end = new Date(anchorLocalMidnight + 86_400_000 - 1);
       return { start, end };
     }
 
     // Day: exactly one local calendar day [local midnight, next local midnight)
-    const localMidnightMs = new Date(`${anchorDateString}T00:00:00.000Z`).getTime() - tzMs;
+    const localMidnightMs =
+      new Date(`${anchorDateString}T00:00:00.000Z`).getTime() - tzMs;
     const start = new Date(localMidnightMs);
-    const end   = new Date(localMidnightMs + 86_400_000 - 1);
+    const end = new Date(localMidnightMs + 86_400_000 - 1);
     return { start, end };
   }
 

@@ -46,7 +46,9 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('SoterCare Backend API')
-    .setDescription('NestJS cloud backend for synced elderly care monitoring data')
+    .setDescription(
+      'NestJS cloud backend for synced elderly care monitoring data',
+    )
     .setVersion('1.0')
     .addTag('auth')
     .addTag('sync')
@@ -61,4 +63,4 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT || 3000, '0.0.0.0');
 }
-bootstrap();
+void bootstrap();

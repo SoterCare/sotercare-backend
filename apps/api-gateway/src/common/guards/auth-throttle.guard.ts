@@ -26,7 +26,11 @@ export class AuthThrottleGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest<{
+      headers?: Record<string, string | string[] | undefined>;
+      ip?: string;
+      socket?: { remoteAddress?: string };
+    }>();
     const forwarded = request.headers?.['x-forwarded-for'];
     const ip =
       (Array.isArray(forwarded) ? forwarded[0] : forwarded) ||

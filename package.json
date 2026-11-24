@@ -29,7 +29,10 @@
     "test:e2e": "jest --config ./apps/back-end/test/jest-e2e.json",
     "migration:show": "node node_modules/typeorm/cli.js migration:show -d dist/apps/api-gateway/database/data-source.js",
     "migration:run": "node node_modules/typeorm/cli.js migration:run -d dist/apps/api-gateway/database/data-source.js",
-    "migration:revert": "node node_modules/typeorm/cli.js migration:revert -d dist/apps/api-gateway/database/data-source.js"
+    "migration:revert": "node node_modules/typeorm/cli.js migration:revert -d dist/apps/api-gateway/database/data-source.js",
+    "lint:check": "eslint \"{src,apps,libs,test}/**/*.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:int": "jest --config jest.int.config.js --passWithNoTests"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.3",
@@ -111,6 +114,12 @@
     "testEnvironment": "node",
     "roots": [
       "<rootDir>/apps/"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "apps/api-gateway/src/contracts/contracts.spec.ts",
+      "apps/api-gateway/src/notifications/push.unit.spec.ts",
+      "apps/api-gateway/src/realtime/device-event.contract.spec.ts"
     ]
   }
 }

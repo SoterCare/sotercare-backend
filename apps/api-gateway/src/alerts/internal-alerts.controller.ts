@@ -31,10 +31,7 @@ export class InternalAlertsController {
   @Post('alert-ready')
   @HttpCode(202)
   async alertReady(@Body() body: AlertReadyDto) {
-    const claimed = await this.alertDispatch.kick(
-      body.alertIds,
-      body.deviceId,
-    );
+    const claimed = await this.alertDispatch.kick(body.alertIds, body.deviceId);
     return { accepted: true, claimed };
   }
 

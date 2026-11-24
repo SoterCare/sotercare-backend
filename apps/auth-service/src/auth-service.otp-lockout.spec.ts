@@ -9,19 +9,21 @@ describe('AuthServiceService OTP lockout', () => {
   function makeService() {
     const store = new Map<string, string>();
     const redis: any = {
-      get: jest.fn(async (k: string) => store.get(k) ?? null),
-      set: jest.fn(async (k: string, v: string) => {
+      get: jest.fn((k: string) => Promise.resolve(store.get(k) ?? null)),
+      set: jest.fn((k: string, v: string) => {
         store.set(k, v);
+        return Promise.resolve();
       }),
-      del: jest.fn(async (k: string) => {
+      del: jest.fn((k: string) => {
         store.delete(k);
+        return Promise.resolve();
       }),
-      incr: jest.fn(async (k: string) => {
+      incr: jest.fn((k: string) => {
         const n = (Number(store.get(k)) || 0) + 1;
         store.set(k, String(n));
-        return n;
+        return Promise.resolve(n);
       }),
-      expire: jest.fn(async () => {}),
+      expire: jest.fn(() => Promise.resolve()),
     };
     const userRepo: any = {};
     return { service: new AuthServiceService(userRepo, redis), store };

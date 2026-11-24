@@ -6,7 +6,11 @@ import { Observable, lastValueFrom, timeout } from 'rxjs';
 import { AuthServiceService } from './auth-service.service';
 
 interface EmailService {
-  sendOtpEmail(data: { email: string; otp: string; name?: string }): Observable<any>;
+  sendOtpEmail(data: {
+    email: string;
+    otp: string;
+    name?: string;
+  }): Observable<any>;
 }
 
 // Cap how long we'll wait on the email-service so a stalled dependency
@@ -22,20 +26,27 @@ export class AuthServiceController implements OnModuleInit {
     private readonly authService: AuthServiceService,
     private readonly jwtService: JwtService, // Inject JwtService
     @Inject('EMAIL_SERVICE') private client: ClientGrpc,
-  ) { }
+  ) {}
 
   onModuleInit() {
     this.emailService = this.client.getService<EmailService>('EmailService');
   }
 
-  private sendOtpEmail(data: { email: string; otp: string; name?: string }): Promise<any> {
+  private sendOtpEmail(data: {
+    email: string;
+    otp: string;
+    name?: string;
+  }): Promise<any> {
     return lastValueFrom(
       this.emailService.sendOtpEmail(data).pipe(timeout(EMAIL_SEND_TIMEOUT_MS)),
     );
   }
 
   @GrpcMethod('AuthService', 'RegisterUser')
-  async registerUser(data: { name: string; email: string }): Promise<{ success: boolean; message: string }> {
+  async registerUser(data: {
+    name: string;
+    email: string;
+  }): Promise<{ success: boolean; message: string }> {
     this.logger.log(`RegisterUser request for ${data?.email}`);
     // Logic:
     // 1. Generate OTP
@@ -55,7 +66,12 @@ export class AuthServiceController implements OnModuleInit {
   }
 
   @GrpcMethod('AuthService', 'VerifyRegistration')
-  async verifyRegistration(data: { email: string; otp: string }): Promise<{ success: boolean; message: string; accessToken?: string; user?: any }> {
+  async verifyRegistration(data: { email: string; otp: string }): Promise<{
+    success: boolean;
+    message: string;
+    accessToken?: string;
+    user?: any;
+  }> {
     this.logger.log(`VerifyRegistration request for ${data?.email}`);
     const isValid = await this.authService.verifyTempOtp(data.email, data.otp);
     if (!isValid) {
@@ -67,7 +83,7 @@ export class AuthServiceController implements OnModuleInit {
       userId: user.id.toString(),
       sub: user.id,
       email: user.email,
-      name: user.name
+      name: user.name,
     };
     const accessToken = this.jwtService.sign(payload);
 
@@ -75,12 +91,14 @@ export class AuthServiceController implements OnModuleInit {
       success: true,
       message: 'User registered successfully',
       accessToken,
-      user
+      user,
     };
   }
 
   @GrpcMethod('AuthService', 'LoginInit')
-  async loginInit(data: { email: string }): Promise<{ success: boolean; message: string }> {
+  async loginInit(data: {
+    email: string;
+  }): Promise<{ success: boolean; message: string }> {
     this.logger.log(`[LoginInit] Request received for: ${data.email}`);
     const userExists = await this.authService.checkUserExists(data.email);
     if (!userExists) {
@@ -101,7 +119,12 @@ export class AuthServiceController implements OnModuleInit {
   }
 
   @GrpcMethod('AuthService', 'LoginVerify')
-  async loginVerify(data: { email: string; otp: string }): Promise<{ success: boolean; message: string; accessToken: string; user?: any }> {
+  async loginVerify(data: { email: string; otp: string }): Promise<{
+    success: boolean;
+    message: string;
+    accessToken: string;
+    user?: any;
+  }> {
     this.logger.log(`[LoginVerify] Verifying OTP for: ${data.email}`);
     const isValid = await this.authService.verifyLoginOtp(data.email, data.otp);
     if (isValid) {
@@ -114,7 +137,7 @@ export class AuthServiceController implements OnModuleInit {
         userId: user.id.toString(),
         sub: user.id,
         email: user.email,
-        name: user.name
+        name: user.name,
       };
       const accessToken = this.jwtService.sign(payload);
       return { success: true, message: 'Login successful', accessToken, user };
@@ -124,13 +147,25 @@ export class AuthServiceController implements OnModuleInit {
   }
 
   @GrpcMethod('AuthService', 'UpdateProfile')
-  async updateProfile(data: { id: number; name: string; email: string; mobileNumber: string }): Promise<{ success: boolean; message: string }> {
+  async updateProfile(data: {
+    id: number;
+    name: string;
+    email: string;
+    mobileNumber: string;
+  }): Promise<{ success: boolean; message: string }> {
     this.logger.log(`[UpdateProfile] Request for user ID: ${data.id}`);
-    return this.authService.updateUser(data.id, data.name, data.email, data.mobileNumber);
+    return this.authService.updateUser(
+      data.id,
+      data.name,
+      data.email,
+      data.mobileNumber,
+    );
   }
 
   @GrpcMethod('AuthService', 'GetProfile')
-  async getProfile(data: { id: number }): Promise<{ success: boolean; message: string; user?: any }> {
+  async getProfile(data: {
+    id: number;
+  }): Promise<{ success: boolean; message: string; user?: any }> {
     this.logger.log(`[GetProfile] Request for user ID: ${data.id}`);
     const user = await this.authService.getUserById(data.id);
     if (!user) {
@@ -140,10 +175,18 @@ export class AuthServiceController implements OnModuleInit {
   }
 
   @GrpcMethod('AuthService', 'InitiateEmailUpdate')
-  async initiateEmailUpdate(data: { userId: number; newEmail: string }): Promise<{ success: boolean; message: string }> {
-    this.logger.log(`[InitiateEmailUpdate] Request for user ID: ${data.userId} to change email to: ${data.newEmail}`);
+  async initiateEmailUpdate(data: {
+    userId: number;
+    newEmail: string;
+  }): Promise<{ success: boolean; message: string }> {
+    this.logger.log(
+      `[InitiateEmailUpdate] Request for user ID: ${data.userId} to change email to: ${data.newEmail}`,
+    );
 
-    const result = await this.authService.initiateEmailUpdate(data.userId, data.newEmail);
+    const result = await this.authService.initiateEmailUpdate(
+      data.userId,
+      data.newEmail,
+    );
 
     if (result.success && result.otp) {
       // Send OTP email to the new email address
@@ -151,7 +194,9 @@ export class AuthServiceController implements OnModuleInit {
         await this.sendOtpEmail({ email: data.newEmail, otp: result.otp });
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
-        this.logger.error(`[InitiateEmailUpdate] Failed to send email: ${message}`);
+        this.logger.error(
+          `[InitiateEmailUpdate] Failed to send email: ${message}`,
+        );
         return { success: false, message: 'Failed to send verification email' };
       }
     }
@@ -161,9 +206,18 @@ export class AuthServiceController implements OnModuleInit {
   }
 
   @GrpcMethod('AuthService', 'VerifyEmailUpdate')
-  async verifyEmailUpdate(data: { userId: number; newEmail: string; otp: string }): Promise<{ success: boolean; message: string }> {
-    this.logger.log(`[VerifyEmailUpdate] Verifying OTP for user ID: ${data.userId}`);
-    return this.authService.verifyEmailUpdate(data.userId, data.newEmail, data.otp);
+  async verifyEmailUpdate(data: {
+    userId: number;
+    newEmail: string;
+    otp: string;
+  }): Promise<{ success: boolean; message: string }> {
+    this.logger.log(
+      `[VerifyEmailUpdate] Verifying OTP for user ID: ${data.userId}`,
+    );
+    return this.authService.verifyEmailUpdate(
+      data.userId,
+      data.newEmail,
+      data.otp,
+    );
   }
 }
-

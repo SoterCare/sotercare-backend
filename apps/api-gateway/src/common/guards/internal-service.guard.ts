@@ -27,7 +27,9 @@ export class InternalServiceGuard implements CanActivate {
     if (!expected) {
       if (Date.now() - this.lastUnconfiguredLog > 60_000) {
         this.lastUnconfiguredLog = Date.now();
-        this.logger.error('INTERNAL_SERVICE_TOKEN is not configured; internal routes are disabled');
+        this.logger.error(
+          'INTERNAL_SERVICE_TOKEN is not configured; internal routes are disabled',
+        );
       }
       throw new ServiceUnavailableException('internal_auth_not_configured');
     }

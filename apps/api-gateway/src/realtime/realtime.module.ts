@@ -8,7 +8,6 @@ import { IotDeviceModule } from '../iot-device/iot-device.module';
 import { SyncModule } from '../sync/sync.module';
 import { RealtimeGateway } from './realtime.gateway';
 import { VitalSyncService } from './vital-sync.service';
-import { AlertWriterService } from './alert-writer.service';
 import { UserSocketRegistry } from './user-socket.registry';
 import { AlertEventsPublisher } from './alert-events.publisher';
 import { AlertDispatchService } from '../alerts/alert-dispatch.service';
@@ -32,7 +31,10 @@ import { NotificationAttemptsService } from '../notifications/notification-attem
         options: {
           url: process.env.HEALTH_SERVICE_URL || 'localhost:50054',
           package: 'health',
-          protoPath: join(__dirname, '../../../../libs/common/src/proto/health.proto'),
+          protoPath: join(
+            __dirname,
+            '../../../../libs/common/src/proto/health.proto',
+          ),
           loader: { keepCase: true, defaults: true, json: true, arrays: true },
           maxReceiveMessageLength: 100 * 1024 * 1024,
           maxSendMessageLength: 100 * 1024 * 1024,
@@ -43,7 +45,6 @@ import { NotificationAttemptsService } from '../notifications/notification-attem
   providers: [
     RealtimeGateway,
     VitalSyncService,
-    AlertWriterService,
     UserSocketRegistry,
     AlertEventsPublisher,
     AlertDispatchService,
@@ -54,7 +55,6 @@ import { NotificationAttemptsService } from '../notifications/notification-attem
   exports: [
     RealtimeGateway,
     VitalSyncService,
-    AlertWriterService,
     UserSocketRegistry,
     AlertEventsPublisher,
     AlertDispatchService,
