@@ -36,9 +36,7 @@ describe('legacy contracts copy', () => {
 
   it('the default alert policy resolves from @sotercare/contracts', () => {
     expect(() =>
-      require.resolve(
-        '@sotercare/contracts/policy/default.alert-policy.v1.json',
-      ),
+      require.resolve('@sotercare/contracts/policy/default.alert-policy.v1.json'),
     ).not.toThrow();
   });
 });
