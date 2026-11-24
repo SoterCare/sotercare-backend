@@ -22,7 +22,6 @@ import { IotDeviceModule } from './iot-device/iot-device.module';
 import { OwnershipModule } from './ownership/ownership.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { NotificationsModule } from './notifications/notifications.module';
-import { NurseModule } from './nurse/nurse.module';
 import { buildTypeOrmOptions } from './database/typeorm-options';
 import { requireJwtSecret } from './common/jwt-secret';
 
@@ -61,7 +60,6 @@ const GRPC_CHANNEL_OPTIONS = {
     TimelineModule,
     RealtimeModule,
     NotificationsModule,
-    NurseModule,
     ClientsModule.register([
       {
         name: 'AUTH_SERVICE',

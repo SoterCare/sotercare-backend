@@ -20,7 +20,6 @@ import { Alert, Vital } from '../database/entities';
 import { IotDeviceService } from '../iot-device/iot-device.service';
 import { SyncBatchDto } from '../sync/dto/sync-batch.dto';
 import { SyncService } from '../sync/sync.service';
-import { AlertWriterService } from './alert-writer.service';
 import { UserSocketRegistry } from './user-socket.registry';
 import { MoistureEpisodeService } from '../alert-policy/moisture-episode.service';
 import { AlertDispatchService } from '../alerts/alert-dispatch.service';
@@ -84,7 +83,6 @@ export class RealtimeGateway
     private readonly jwtService: JwtService,
     private readonly iotDeviceService: IotDeviceService,
     private readonly syncService: SyncService,
-    private readonly alertWriterService: AlertWriterService,
     @InjectRepository(Vital)
     private readonly vitalRepository: Repository<Vital>,
     @InjectRepository(Alert)
@@ -403,26 +401,8 @@ export class RealtimeGateway
       this.logger.warn(`Failed to save realtime vitals to timeline for device ${deviceId}: ${err}`);
     }
 
-    // Write all sensor-driven alerts for the batch via one batched insert.
-    // A failure must not be acked as success: a strict gateway then buffers and
-    // resends, and deterministic alert ids make the resend idempotent.
+    // Sensor-driven alerts are not derived from telemetry in the cloud (D-08).
     let alertWriteFailed = false;
-    try {
-      const inserted = await this.alertWriterService.writeAlertsForLogs(
-        deviceId,
-        grpcLogs,
-        'iot_live',
-        this.alertRepository,
-      );
-      // AR-2/AR-5: the insert has committed (autocommit); hand the newly
-      // created rows to the single dispatch path. Not awaited by the ack.
-      if (inserted.length > 0) {
-        void this.alertDispatch.kick(inserted.map((alert) => alert.id));
-      }
-    } catch (err) {
-      alertWriteFailed = true;
-      this.logger.warn(`Failed to save realtime alerts for device ${deviceId}: ${err}`);
-    }
 
     // AR-3: moisture is evaluated as episodes (one alert per wet condition).
     try {

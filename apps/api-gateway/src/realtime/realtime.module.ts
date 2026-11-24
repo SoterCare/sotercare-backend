@@ -8,7 +8,6 @@ import { IotDeviceModule } from '../iot-device/iot-device.module';
 import { SyncModule } from '../sync/sync.module';
 import { RealtimeGateway } from './realtime.gateway';
 import { VitalSyncService } from './vital-sync.service';
-import { AlertWriterService } from './alert-writer.service';
 import { UserSocketRegistry } from './user-socket.registry';
 import { AlertEventsPublisher } from './alert-events.publisher';
 import { AlertDispatchService } from '../alerts/alert-dispatch.service';
@@ -43,7 +42,6 @@ import { NotificationAttemptsService } from '../notifications/notification-attem
   providers: [
     RealtimeGateway,
     VitalSyncService,
-    AlertWriterService,
     UserSocketRegistry,
     AlertEventsPublisher,
     AlertDispatchService,
@@ -54,7 +52,6 @@ import { NotificationAttemptsService } from '../notifications/notification-attem
   exports: [
     RealtimeGateway,
     VitalSyncService,
-    AlertWriterService,
     UserSocketRegistry,
     AlertEventsPublisher,
     AlertDispatchService,
