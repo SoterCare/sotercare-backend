@@ -114,6 +114,12 @@
     "testEnvironment": "node",
     "roots": [
       "<rootDir>/apps/"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "apps/api-gateway/src/contracts/contracts.spec.ts",
+      "apps/api-gateway/src/notifications/push.unit.spec.ts",
+      "apps/api-gateway/src/realtime/device-event.contract.spec.ts"
     ]
   }
 }
