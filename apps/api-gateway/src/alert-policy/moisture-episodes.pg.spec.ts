@@ -59,7 +59,7 @@ describePg('moisture episodes (AR-3, real PostgreSQL)', () => {
     // Same rule shape as the repository policy, shorter cooldown for the test.
     const policy = JSON.parse(
       fs.readFileSync(
-        path.resolve(process.cwd(), 'config/alert-policy.v1.json'),
+        require.resolve('@sotercare/contracts/policy/default.alert-policy.v1.json'),
         'utf8',
       ),
     );

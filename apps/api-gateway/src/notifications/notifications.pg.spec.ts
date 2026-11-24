@@ -467,7 +467,7 @@ describePg('push notifications (AR-6 / AR-8, real PostgreSQL)', () => {
     const approvedPolicy = () => {
       const p = JSON.parse(
         fs.readFileSync(
-          path.resolve(process.cwd(), 'config/alert-policy.v1.json'),
+          require.resolve('@sotercare/contracts/policy/default.alert-policy.v1.json'),
           'utf8',
         ),
       );

@@ -1,7 +1,6 @@
 /**
- * AR-9: `device_event` v1 (contracts/v1/device_event.schema.json), validated
- * by hand so the production bundle does not need ajv. Parity with the JSON
- * Schema is enforced by device-event.contract.spec.ts.
+ * AR-9: `device_event` v1 (legacy wire format), validated by hand so the
+ * production bundle does not need ajv.
  */
 export interface DeviceEventV1 {
   schema: 'sotercare.device_event.v1';

@@ -1,10 +1,10 @@
 import * as fs from 'fs';
-import * as path from 'path';
+
 import { MoisturePolicy } from './moisture-episode.machine';
 
 /**
  * Single alert-policy contract shared by the api-gateway and the Python
- * Safety Guard (config/alert-policy.v1.json). Product/clinical values are not
+ * Safety Guard (@sotercare/contracts policy/default.alert-policy.v1.json). Product/clinical values are not
  * approved yet; the file says so and escalation stays off until it is.
  */
 export type AlertPolicy = {
@@ -29,7 +29,7 @@ export type AlertPolicy = {
 export function loadAlertPolicy(): AlertPolicy {
   const file =
     process.env.ALERT_POLICY_PATH ??
-    path.resolve(process.cwd(), 'config/alert-policy.v1.json');
+    require.resolve('@sotercare/contracts/policy/default.alert-policy.v1.json');
   const policy = JSON.parse(fs.readFileSync(file, 'utf8')) as AlertPolicy;
   const m = policy.moisture;
   if (!(m.closeBelow <= m.openAtOrAbove)) {
